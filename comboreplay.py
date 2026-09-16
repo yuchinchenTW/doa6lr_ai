@@ -52,6 +52,7 @@ IDLE_MOVES = (0, 1, 2, 3, 4)
 
 
 CMD_TABLE = {}      # cmd -> (token, button held)  from commands.json (--calibrate)
+MOVE_TABLE = {}     # move id -> token that produced it in the calibration
 
 
 def load_commands(path="commands.json"):
@@ -65,8 +66,13 @@ def load_commands(path="commands.json"):
     except (OSError, ValueError):
         return
     for tok, v in table.items():
+        if tok.startswith("_"):
+            continue
+        for m in ([v.get("move")] if v.get("move") else []) + list(v.get("ids") or []):
+            if m and (m not in MOVE_TABLE or len(tok) < len(MOVE_TABLE[m])):
+                MOVE_TABLE[m] = tok.replace("h", "")
         c = v.get("cmd")
-        if not c or tok.startswith("_"):
+        if not c:
             continue
         cur = CMD_TABLE.get(c)
         rank = (tok.endswith("h") or "h" in tok[:-2], len(tok))
@@ -113,17 +119,22 @@ def decode(cmd):
 FAMILY = {10: "P", 11: "K", 12: "PK", 13: "HK", 15: "K", 55: "S", 50: "S", 57: "PK", 20: "K"}
 
 
-def candidates(cmd):
+def candidates(cmd, want_mv=None):
+    """What to try for a code we never produced ourselves. The demo of one
+    stage showed the hundreds are NOT a reliable button family (1083 and
+    1085 were P+K after a hit, 1350-1353 P / K inside a stance), so: the
+    calibration token that produced the wanted move id if we have one, then
+    every button, the code's own family first."""
+    out = []
+    if want_mv in MOVE_TABLE:
+        out.append(MOVE_TABLE[want_mv])
     fam = FAMILY.get(cmd // 100)
-    if fam is None:
-        return []
+    for b in ([fam] if fam else []) + ["P", "K", "PK", "HK", "S"]:
+        if b not in out:
+            out.append(b)
     digit = (cmd % 100) // 10
-    out = [fam]                                  # the plain button first: string hits
-    if digit and digit in NUMPAD and digit != 5:
+    if fam and digit and digit in NUMPAD and digit != 5 and f"{digit}{fam}" not in out:
         out.append(f"{digit}{fam}")
-    for other in ("P", "K", "PK", "HK", "S"):
-        if other != fam:
-            out.append(other)
     return out
 
 
@@ -326,11 +337,11 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None):
             inj.down(names); time.sleep(0.05); inj.up(names)
             ok = True
         else:
-            cands = candidates(cmd)
+            cands = candidates(cmd, s["mv"])
             if cands:
-                n = tries.get(cmd, 0)
+                n = tries.get((cmd, s["mv"]), 0)
                 used = cands[n % len(cands)]
-                tries[cmd] = n + 1
+                tries[(cmd, s["mv"])] = n + 1
                 ok = press(inj, cmd, facing_right, tok=used)
             else:
                 ok = False
@@ -338,6 +349,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None):
         prev = steps[i - 1]["mv"] if i else None
         t1 = time.perf_counter()
         limit = 0.35 if i + 1 < len(steps) else 1.2
+        again, t_last = 0, time.perf_counter()
         while time.perf_counter() - t1 < limit:
             me.refresh()
             mv = me.get("CurrentMove")
@@ -348,14 +360,26 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None):
                     break
             elif ids:
                 break
+            elif (ok and used and not from_idle and again < 4
+                  and time.perf_counter() - t_last > 0.07):
+                # a string follow-up the game did not take yet: the demo's
+                # "frame 1" is the game's own pre-loaded command, not a
+                # human timing. Press again every ~4 frames (holdbot's
+                # combo engine lands its strings this way)
+                press(inj, cmd, facing_right, tok=used if decode(cmd) is None else None)
+                again += 1
+                t_last = time.perf_counter()
             time.sleep(0.001)
         hit = s["mv"] is not None and s["mv"] in ids
         if hit and decode(cmd) is None and used and used not in MOVE_CMDS.values():
             learned[cmd] = used
+        if not hit and s["mv"] is not None and ids:
+            tries.setdefault("_miss", []).append((s["tok"], used, ids[0]))
         results.append((s["tok"], s["mv"], ids))
         print(f"  {i + 1:>2}. {s['tok']:<10} wanted move {s['mv']}  got "
               f"{'>'.join(map(str, ids)) if ids else None}"
               + (f"  tried {used}" if decode(cmd) is None and used else "")
+              + (f"  (+{again} re-press)" if again else "")
               + ("" if ok else "  (unknown code, nothing pressed)")
               + ("  OK" if hit else ""))
     hits = sum(1 for _, w, g in results if w is not None and w in g)
