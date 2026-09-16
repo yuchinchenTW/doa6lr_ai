@@ -72,11 +72,15 @@ LOW_THROW_CMDS = ()              # the direction guess (373 = 1T) was WRONG: 814
                                  # 8148=1349. Only HighMidLowGround 3 means low
 THROWS_FILE = "throws.json"      # {char: {move: {"cmd": {code: n}, "hml": {v: n}}}}
 ANSWERS_FILE = "throw_answers.json"  # {char: {move: {"duck": [ok, n], "back": [..], "side": [..]}}}
-ESCAPES_FILE = "throw_escapes.json"  # {char: {throw start move: {"T": [ok, n], "6T": [..], "4T": [..], "2T": [..]}}}
+ESCAPES_FILE = "throw_escapes.json"  # {"cmd<CommandCode>": {"T": [ok, n], "6T": [..], "4T": [..], "2T": [..]}}
+# keyed by the throw's CommandCode, not (character, move): the break input
+# is the throw's own command, so every character's 6T is broken the same
+# way, and survival mode shows each character's throws only once or twice
 # a throw is broken by matching its command: plain T for a neutral throw
 # (cmd 363, 4/4 with T), direction + T for a command throw. First guess by
 # the CommandCode seen at the start, then learn per throw like the answers.
-ESCAPE_GUESS = {363: "T", 364: "6T", 365: "4T", 366: "2T", 367: "2T"}
+ESCAPE_GUESS = {363: "T", 400: "T",          # both broke with T every time (4/4, 2/2, 1/1 x3)
+                364: "6T", 365: "4T", 366: "2T", 367: "2T"}
 ESCAPE_OPTIONS = ("T", "6T", "4T", "2T")
 NOHOLD_FILE = "nohold.json"      # {char: [move ids]} - strikes our hold "caught" for 0 dmg
 STUN_FILE = "stun_holds.json"    # {our reaction id: [landed, tried]} - holds attempted
@@ -1436,7 +1440,7 @@ def main():
     def pick_escape(ch, st_mv, cmd):
         """Same scoring as the throw answers: keep the guess for the
         CommandCode until it has failed twice, then the best (ok+1)/(n+2)."""
-        st = throw_esc.setdefault(str(ch), {}).setdefault(str(st_mv), {})
+        st = throw_esc.setdefault(f"cmd{cmd}", {})
         default = ESCAPE_GUESS.get(cmd, "T")
         d = st.get(default, [0, 0])
         if d[1] < 2 or (d[0] + 1) / (d[1] + 2) >= 0.5:
@@ -1468,16 +1472,16 @@ def main():
             return
         escape["seq"] = None
         ok = me.get("CurrentHealth") >= seq["hp0"]
-        st = throw_esc.setdefault(str(fchar), {}).setdefault(str(seq["st"]), {})
+        st = throw_esc.setdefault(f"cmd{seq['cmd']}", {})
         st.setdefault(seq["opt"], [0, 0])
         st[seq["opt"]][0] += 1 if ok else 0
         st[seq["opt"]][1] += 1
         o, n = st[seq["opt"]]
         if ok:
-            print(f"        ! throw {seq['st']} broken with {seq['opt']}  ({o}/{n})")
+            print(f"        ! throw {seq['st']} (cmd {seq['cmd']}) broken with {seq['opt']}  ({o}/{n})")
         else:
             nxt = pick_escape(fchar, seq["st"], seq["cmd"])
-            print(f"        ! throw {seq['st']}: {seq['opt']} did not break it "
+            print(f"        ! throw {seq['st']} (cmd {seq['cmd']}): {seq['opt']} did not break it "
                   f"({o}/{n})" + (f" - trying {nxt} next" if nxt != seq["opt"] else ""))
         try:
             with open(ESCAPES_FILE, "w", encoding="utf-8") as fh:
@@ -3088,11 +3092,11 @@ def main():
                       f"{escape['ok']} parts cost no damage")
                 for k, (ok, n) in sorted(escape["by"].items()):
                     print(f"    {k:<32} {ok}/{n}")
-            esc = throw_esc.get(str(fchar), {})
+            esc = {k: v for k, v in throw_esc.items() if k.startswith("cmd")}
             if esc:
-                print(f"  throw breaks learned for char {fchar} (input: broken/tried):")
-                for st_mv, opts in sorted(esc.items()):
-                    print(f"    {st_mv:<8} " + "  ".join(f"{o} {v[0]}/{v[1]}" for o, v in opts.items()))
+                print("  throw breaks learned by CommandCode (input: broken/tried):")
+                for key, opts in sorted(esc.items(), key=lambda kv: int(kv[0][3:])):
+                    print(f"    {key:<8} " + "  ".join(f"{o} {v[0]}/{v[1]}" for o, v in opts.items()))
             if oh_stats[0] or oh_stats[1]:
                 print(f"  offensive holds: {oh_stats[1]} learned this session, "
                       f"{oh_stats[0]} sidestepped; known for char {fchar}: "

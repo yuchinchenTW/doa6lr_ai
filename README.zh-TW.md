@@ -77,7 +77,7 @@ python holdbot.py                     # 預設 3-way
 | `startup.json` | 對手角色 + 招式 | 判定開始幀（看到 Phase 0→1 那一幀記下） |
 | `throws.json` | 對手角色 + 招式 | 投技的 CommandCode 與上中下段 |
 | `throw_answers.json` | 對手角色 + 招式 | 蹲／後撤／側移／防禦各自的成功次數；失敗兩次自動換 |
-| `throw_escapes.json` | 對手角色 + 投技 | 解投輸入（T／6T／4T／2T）各自的成功次數；先照 CommandCode 猜，失敗兩次自動換 |
+| `throw_escapes.json` | 投技的 CommandCode（跨角色共用） | 解投輸入（T／6T／4T／2T）各自的成功次數；先照 CommandCode 猜，失敗兩次自動換 |
 | `oh.json` | 對手角色 | 攻擊性投技（會抓 Hold 的招） |
 | `nohold.json` | 對手角色 | Hold 接到卻 0 傷害的招，改用防禦 |
 | `stun_holds.json` | 我方受創動畫 id | 在該硬直中出 Hold 的成敗；0/3 或倒地動畫就退休 |
