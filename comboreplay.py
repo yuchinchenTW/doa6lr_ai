@@ -331,9 +331,14 @@ def close_in(me, foe, inj, facing_right, want, timeout=2.5):
     inj.down(fwd)
     t0 = time.perf_counter()
     flipped = False
+    d_start, t_gain = d, time.perf_counter()
     while time.perf_counter() - t0 < timeout:
         me.refresh()
         mv = me.get("CurrentMove")
+        if d is not None and d_start - d > 5:
+            d_start, t_gain = d, time.perf_counter()
+        elif time.perf_counter() - t_gain > 0.6:
+            break                                # not getting closer: give up
         if not flipped and mv in (2, 4) and time.perf_counter() - t0 > 0.06:
             inj.up(fwd)                          # walking away: mirrored
             fwd = dirs_to_names(-1 if facing_right else 1, 0)
@@ -345,6 +350,9 @@ def close_in(me, foe, inj, facing_right, want, timeout=2.5):
         time.sleep(0.005)
     inj.up(fwd)
     time.sleep(0.1)                              # neutral, or the button reads 6P
+    if d is not None and d > want + 3:
+        print(f"      (closing in stopped at {d:.0f}, wanted {want}: "
+              f"{'walked the wrong way, flipped' if flipped else 'the walk gained nothing - touching the post?'})")
     return d
 
 
@@ -625,6 +633,9 @@ def probe(sides, inj, facing_right, hot, want_cmd, btn="PK"):
         ("3 (fwd+down) + " + btn,              lambda: (inj.down(f), wait(0.017), inj.down(["down", key]), wait(0.05), inj.up(["down", key] + f))),
         ("66 dash, 2 + " + btn,                lambda: (inj.down(f), wait(0.03), inj.up(f), wait(0.03), inj.down(f), wait(0.15), inj.up(f), wait(0.017), inj.down(["down", key]), wait(0.05), inj.up(["down", key]))),
         ("8 + " + btn + " together",           lambda: (inj.down(["up", key]), wait(0.05), inj.up(["up", key]))),
+        ("run (66 held 0.7s), then 2 + " + btn, lambda: (inj.down(f), wait(0.03), inj.up(f), wait(0.03), inj.down(f), wait(0.7), inj.up(f), inj.down(["down", key]), wait(0.05), inj.up(["down", key]))),
+        ("run (66 held 0.7s), then " + btn,     lambda: (inj.down(f), wait(0.03), inj.up(f), wait(0.03), inj.down(f), wait(0.7), inj.down([key]), wait(0.05), inj.up([key] + f))),
+        ("run, 2 + " + btn + " while running",  lambda: (inj.down(f), wait(0.03), inj.up(f), wait(0.03), inj.down(f), wait(0.7), inj.down(["down", key]), wait(0.05), inj.up(["down", key] + f))),
         ("left+right together + " + btn,       lambda: (inj.down(f + b), wait(0.017), inj.down([key]), wait(0.05), inj.up([key] + f + b))),
     ]
     print(f"probing for cmd {want_cmd} with {btn}. F10 aborts.")
