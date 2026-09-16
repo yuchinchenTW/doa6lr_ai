@@ -2591,9 +2591,14 @@ def main():
                                 print(f"  <    danger: {danger_cache['mv']} reaches "
                                       f"{d_reach:.0f} - backing off instead of poking")
                     elif zoning is not None:
-                        if now - zone_t0[0] > 0.35 and d_now <= zone_t0[1] + 5:
+                        if (now - zone_t0[0] > 0.35 and d_now <= zone_t0[1] + 5
+                                and (my_mv_now in FWD_IDS + BACK_IDS
+                                     or me.get("MoveType") != 17)):
                             # walking back gained nothing: a wall. Stop
                             # retreating for a while and fight instead.
+                            # (not during the round intro, 17: the key does
+                            # not move us there, and "cornered" at the bell
+                            # put us in a crouch under the opening mid punch)
                             inj.up(zoning)
                             zoning = None
                             cornered[0] = now + 3.0
