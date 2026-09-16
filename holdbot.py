@@ -1007,9 +1007,10 @@ def main():
                       f"{dealt} dmg since the opener"
                       + (f", we lost {taken}" if taken else "")
                       + (f"  [{combo['recipe']}]" if combo.get("recipe") else ""))
-            if combo.get("recipe") and combo["hits"]:
+            if combo.get("recipe") and combo["hits"] and dealt <= 500 and taken <= 500:
                 # net: the CPU holds the second hit of a string often (8294/8300
-                # cost 300+ in one match) - a string that gets us held scores low
+                # cost 300+ in one match) - a string that gets us held scores low.
+                # A garbage health read (object swap) must not enter the bank
                 bank_result(combo["recipe"], combo.get("rkey", "default"), dealt - taken)
         combo.update(i=0, last_mv=None, t=0.0, hp0=None, hits=0, seq=[], opener=None,
                      recipe=None, rkey=None)
@@ -1139,6 +1140,8 @@ def main():
             # meant to go back (6H read as mirrored -> flipped -> 4H = 154,
             # 0 for 4 mid kicks in the first 4-way match)
             mirrored = (walk in FWD_IDS) if dx < 0 else (walk in BACK_IDS)
+            if walk is not None:
+                swap_ref[0] = None             # facing confirmed as of now
             if mirrored:                       # we walked the wrong way
                 inj.up(horiz)
                 facing_state[0] = not facing_state[0]
@@ -1157,6 +1160,9 @@ def main():
         return pressed_at, flipped
 
     pos_warn = [0.0]
+    swap_ref = [None]       # unit vector foe-me (world XZ) frozen when a throw /
+                            # hold throw / knockdown starts; compared when it ends
+    swap_flips = [0]
     pos_zero = [time.perf_counter()]    # last time the distance was > 8
     pos_last = [0.0, time.perf_counter()]   # last distinct distance, when
 
@@ -1203,6 +1209,29 @@ def main():
                 mx, my_, mz = me.xyz()
                 fx, fy, fz = foe.xyz()
                 d = ((mx - fx) ** 2 + (mz - fz) ** 2) ** 0.5
+        # Side swaps. Screen left/right is not world X, but a throw, a hold
+        # throw or a knockdown that puts the foe on our OTHER side reverses
+        # the world vector between us while the camera stays where it was.
+        # Slow circling (sidesteps) rotates the camera along and must not
+        # count, so the vector is only compared across such an event: frozen
+        # when it starts, checked when both are back on their feet. 303 of
+        # 423 holds in one survival run went in with a stale facing.
+        if pos_ok[0] and 40 < d < 800:
+            ux, uz = (fx - mx) / d, (fz - mz) / d
+            mm, fm = me.get("CurrentMove"), foe.get("CurrentMove")
+            in_event = (me.get("MoveType") in (MT_THROWN, MT_HOLD_HIT)
+                        or foe.get("MoveType") in (MT_THROWN, MT_HOLD_HIT)
+                        or foe.get("MoveKind") == 4
+                        or 125 <= mm <= 135 or 125 <= fm <= 135)
+            if in_event:
+                if swap_ref[0] is None:
+                    swap_ref[0] = (ux, uz)
+            elif swap_ref[0] is not None:
+                rx, rz = swap_ref[0]
+                swap_ref[0] = None
+                if rx * ux + rz * uz < -0.3:      # they came out the other side
+                    facing_state[0] = not facing_state[0]
+                    swap_flips[0] += 1
         return d, facing_state[0]
 
     # ---------------------------------------------------------------- probe
@@ -1845,6 +1874,9 @@ def main():
             prev_hp[:] = [my_hp_now, foe_hp_now]
             if my_hp_now < last_my_hp and me.get("MoveType") in (0, 10, 13, 17):
                 pass                                # round end / reset, not a hit
+            elif my_hp_now < last_my_hp and last_my_hp - my_hp_now > 500:
+                pass                # a stale object between anchor moves read
+                                    # 43394 (twice in one run): not a hit
             elif my_hp_now < last_my_hp:
                 d = last_my_hp - my_hp_now
                 fmv = foe.get("CurrentMove")
@@ -3100,7 +3132,8 @@ def main():
                   f"zoning walk flipped the facing {zone_flip[1]}x; "
                   f"4S needed gauge est >= {break_need[0]} by the end")
             print(f"  {probe_dirty_n[0]} probes settled the facing right after a side swap "
-                  f"(hold throw / thrown / new opponent / round start)")
+                  f"(hold throw / thrown / new opponent / round start); "
+                  f"{swap_flips[0]} swaps seen in the positions across a throw / knockdown")
             print(f"  {facing_fixes[0]} holds had their facing corrected by the "
                   f"pretap probe (the X-sign guess was wrong)")
         if keys_held_count[0]:
