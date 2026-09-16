@@ -1,6 +1,6 @@
 # DOA6LR auto-hold — 技術筆記
 
-DOA5LR 那套自動格擋（doa5ai）的 DOA6 Last Round 版。這份是開發過程的技術筆記；安裝與用法看上一層的 `README.md`。
+DOA5LR 那套自動格擋（doa5ai）的 DOA6 Last Round 版。這份是開發過程的技術筆記；安裝與用法看上一層的 `README.zh-TW.md`（英文版 `README.md`）。
 目標一樣：讀對手的攻擊屬性，選出剋它的 Hold，在發生幀窗內送出輸入。
 
 > 離線 / 訓練模式 / 本機對戰。線上排位開這個就是對真人作弊。

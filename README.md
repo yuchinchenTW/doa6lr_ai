@@ -1,109 +1,130 @@
-# doa6lr_ai — DOA6 Last Round 自動 Hold／反擊機器人
+# doa6lr_ai — auto-hold / anti-CPU bot for DOA6 Last Round
 
-繁體中文 | [English](README.en.md)
+English | [繁體中文](README.zh-TW.md)
 
-An auto-hold / anti-CPU bot for **Dead or Alive 6 Last Round** (`DOA6LR.exe`, 64-bit, Windows).
-It reads the opponent's move state straight out of game memory, picks the counter hold,
-and sends keyboard input inside the startup window. Offline use only.
+An auto-hold bot for **Dead or Alive 6 Last Round** (`DOA6LR.exe`, 64-bit, Windows).
+It reads the opponent's move state straight out of game memory (move id, phase, frame,
+strike type, throw command), sends the matching hold inside the startup window,
+answers throws with crouch / backdash / sidestep / throw escape, and punishes with
+combos it has learned. **Offline vs CPU only** (Versus, Training, Survival, Arcade).
 
-讀取遊戲記憶體裡對手的招式狀態（招式 ID、階段、幀數、打擊屬性、投技指令），在對手的發生幀窗內送出對應的 Hold，
-投技則用蹲／後撤／側移／解投回應，並用學到的連段反擊。**只用於離線對 CPU**（Versus、訓練、連戰、街機）。
-
-> 線上對真人開這個就是作弊。請不要。
+> Running this against another person online is cheating. Don't.
 
 ---
 
-## 現況
+## Results
 
-- 一般輸入延遲下 Hold 命中率 90–100%；連戰模式對 CPU 曾打到 155–2、62–1。
-- 對手每一招的發生幀、投技類型、攻擊性投技（OH）、不能 Hold 的招、每個投技最好的回應方式，全部在對局中**自動學習並存成 JSON**，下次啟動直接沿用。
-- 連段以「淨傷害 = 打出 − 被打」自動比較（多臂吃角子老虎），每個自己的角色分開統計。
-- 對手換人（連戰模式）、自己坐 P1 或 P2、遊戲設 3-way 或 4-way Hold、刻意加的輸入延遲，都會自動偵測或用旗標對應。
-- **目前只用女天狗（id 21）和不知火舞（id 30）訓練過。** 進攻表（戳擊、連段池）只有這兩隻，連段統計也只有這兩隻的資料；其他角色會退回通用連段池與 P 戳擊，要從零重新累積。對手方面，`startup.json` 等表只涵蓋實際遇過的 CPU 角色，沒遇過的角色第一次見到每一招都要先學（沒學過的招預設防禦）。
+![DOA6LR True Fighter high-score board: the top seven entries are all the bot's, playing Mai Shiranui and Nyotengu](docs/true_fighter_record.png)
 
-## 需求
+The in-game **True Fighter** (survival) leaderboard after a week of runs. The top seven scores are
+the bot's: 1st and 3rd as Mai Shiranui (5,977,400 / 3,822,600), 2nd and 4th–7th as Nyotengu
+(5,090,800 down to 886,200). Places 8–10 are the untouched defaults.
 
-- Windows 10/11，DOA6 Last Round（Steam）
-- Python 3.10 以上。`holdbot.py` 只用標準函式庫（`ctypes` 讀記憶體、`SendInput` 送鍵盤）
-- 掃描工具（`autoscan.py`、`probe.py`、`timeline.py`）另外需要 `numpy`
-- 可選：`pip install vgamepad`（虛擬 Xbox 手把，需要 ViGEmBus）
-- 以**系統管理員**身分執行終端機（`ReadProcessMemory` 需要）
+## Status
 
-遊戲內設定：鍵盤預設鍵位（H = J、P = K、K = L、T = M；U = P+K、I = S、O = H+K）。
-訓練模式的 Hold 設定要跟 `--hold-mode` 一致。
+- 90–100% hold rate at normal input latency; Survival runs of 155–2 and 62–1 against the CPU.
+- Startup frames of every opponent move, throw types, offensive holds (OH), unholdable moves and
+  the best answer to each throw are **learned during play and saved as JSON**, then reused on
+  the next start.
+- Combos are compared by net damage (dealt minus taken) with a bandit, per own character.
+- Opponent changes (Survival), sitting on P1 or P2, 3-way vs 4-way hold setting and deliberately
+  added input lag are detected automatically or covered by a flag.
+- **Trained only with Nyotengu (id 21) and Mai Shiranui (id 30).** Offence tables (poke, combo
+  pool) and combo statistics exist for these two only. Any other character falls back to a generic
+  combo pool and a P poke and has to accumulate its statistics from scratch. On the opponent side
+  the tables (`startup.json` etc.) cover only the CPU characters actually met so far; a new
+  opponent has to be learned move by move (unknown moves are guarded by default).
 
-## 快速開始
+## Requirements
+
+- Windows 10/11, DOA6 Last Round (Steam)
+- Python 3.10+. `holdbot.py` uses the standard library only (`ctypes` for memory reads,
+  `SendInput` for the keyboard)
+- The scanning tools (`autoscan.py`, `probe.py`, `timeline.py`) also need `numpy`
+- Optional: `pip install vgamepad` (virtual Xbox pad, needs ViGEmBus)
+- Run the terminal **as Administrator** (`ReadProcessMemory` needs it)
+
+In-game settings: default keyboard binds (H = J, P = K, K = L, T = M; U = P+K, I = S, O = H+K).
+The hold setting in Training must match `--hold-mode`.
+
+## Quick start
 
 ```powershell
 git clone https://github.com/yuchinchenTW/doa6lr_ai.git
 cd doa6lr_ai
-python fields.py                      # 確認位址表還有效（應該印出雙方血量等欄位）
-python holdbot.py --dry-run           # 只判斷、只印，不送輸入
-python holdbot.py --hold-mode 4way    # 真的打（遊戲設 4-way 時）
-python holdbot.py                     # 預設 3-way
+python fields.py                      # check the address table still resolves (prints both health values)
+python holdbot.py --dry-run           # decide and print only, no input
+python holdbot.py --hold-mode 4way    # play (game set to 4-way holds)
+python holdbot.py                     # default 3-way
 ```
 
-啟動後先進對局（或訓練模式），程式會自己找座標列、確認自己是 P1 還是 P2，然後開始。`Ctrl-C` 結束並印統計。
+Start a match (or Training) first. The bot finds the position rows, works out whether the keyboard
+drives P1 or P2, then starts. `Ctrl-C` stops it and prints the statistics.
 
-## 常用旗標
+## Common flags
 
-| 旗標 | 預設 | 說明 |
+| Flag | Default | Meaning |
 |---|---|---|
-| `--hold-mode 3way\|4way` | `3way` | 要跟遊戲設定一致；3-way 時中腳也用 4H |
-| `--me auto\|P1\|P2` | `auto` | 自動偵測鍵盤控制的是哪一邊 |
-| `--window N` | 16 | 對手剩幾幀進判定時出 Hold |
-| `--poke ...` | `auto` | 對手閒置時的戳擊，依角色自動選（女天狗 P+K、不知火舞 4P） |
-| `--combo ...` | `auto` | 打中後的連段；`auto` 用角色連段池自動比較 |
-| `--no-hold-in-stun` | 關 | 預設在 hit stun 中也出 Hold（遊戲會暫存輸入到硬直結束） |
-| `--no-break-blow` | 關 | 預設 Break Gauge 滿時用 6S Break Blow 反擊 |
-| `--break-hold` | 關 | 開啟 4S Break Hold |
-| `--throw-answer crouch\|jab\|none` | `crouch` | 投技的基本回應；每個投技會再自動學最好的 |
-| `--unknown guard\|skip\|hold` | `guard` | 沒學過發生幀的招怎麼處理 |
-| `--dry-run` / `--probe` | | 不送輸入 / 只看偵測與學 startup |
+| `--hold-mode 3way\|4way` | `3way` | Must match the game setting; in 3-way mid kicks use 4H too |
+| `--me auto\|P1\|P2` | `auto` | Detect which side the keyboard controls |
+| `--window N` | 16 | Hold when this many or fewer frames remain before the strike goes active |
+| `--poke ...` | `auto` | Poke while the opponent idles, chosen per character (Nyotengu P+K, Mai 4P) |
+| `--combo ...` | `auto` | String after a hit; `auto` compares the character's combo pool |
+| `--no-hold-in-stun` | off | By default holds are attempted in hit stun too (the game buffers the input to the end of the stun) |
+| `--no-break-blow` | off | By default a full Break Gauge is spent on 6S Break Blow as the punish |
+| `--break-hold` | off | Enable 4S Break Hold |
+| `--throw-answer crouch\|jab\|none` | `crouch` | Base answer to throws; the best answer per throw is learned on top |
+| `--unknown guard\|skip\|hold` | `guard` | What to do with a move whose startup is not learned yet |
+| `--dry-run` / `--probe` | | No input / detection and startup learning only |
 
-完整清單：`python holdbot.py --help`。
+Full list: `python holdbot.py --help`.
 
-## 它學什麼、存在哪
+## What it learns and where
 
-| 檔案 | 鍵 | 內容 |
+| File | Key | Content |
 |---|---|---|
-| `startup.json` | 對手角色 + 招式 | 判定開始幀（看到 Phase 0→1 那一幀記下） |
-| `throws.json` | 對手角色 + 招式 | 投技的 CommandCode 與上中下段 |
-| `throw_answers.json` | 對手角色 + 招式 | 蹲／後撤／側移／防禦各自的成功次數；失敗兩次自動換 |
-| `throw_escapes.json` | 對手角色 + 投技 | 解投輸入（T／6T／4T／2T）各自的成功次數；先照 CommandCode 猜，失敗兩次自動換 |
-| `oh.json` | 對手角色 | 攻擊性投技（會抓 Hold 的招） |
-| `nohold.json` | 對手角色 | Hold 接到卻 0 傷害的招，改用防禦 |
-| `stun_holds.json` | 我方受創動畫 id | 在該硬直中出 Hold 的成敗；0/3 或倒地動畫就退休 |
-| `combo_stats.json` | 自己的角色 + 起手招 | 每條連段的次數與淨傷害 |
-| `pos.json` | | 角色物件內座標欄位的偏移 |
-| `layout.json` | | 記憶體位址表（靜態指標鏈 + 欄位偏移） |
+| `startup.json` | opponent character + move | Frame the move goes active (the frame Phase turns 0→1) |
+| `throws.json` | opponent character + move | CommandCode and high/mid/low of each throw |
+| `throw_answers.json` | opponent character + move | Successes of crouch / back / side / guard; switches after two failures |
+| `throw_escapes.json` | opponent character + throw | Successes of each break input (T / 6T / 4T / 2T); guessed from the CommandCode first, switched after two failures |
+| `oh.json` | opponent character | Offensive holds (moves that grab a hold) |
+| `nohold.json` | opponent character | Moves a hold "caught" for 0 damage; guarded instead |
+| `stun_holds.json` | our hit-reaction animation id | Holds tried in that stun; retired at 0/3 or when it turns out to be a knockdown |
+| `combo_stats.json` | own character + opener | Tries and net damage of every string |
+| `pos.json` | | Offset of the position field inside the character object |
+| `layout.json` | | Memory layout (static pointer chains + field offsets) |
 
-自己換角色不會影響對手相關的學習；對手相關的表按對手角色 id 分開。
+Switching your own character does not touch the opponent tables; they are keyed by opponent id.
 
-## 輸出怎麼讀
+## Reading the output
 
-`#n` Hold、`~` 投技回應（`ours:` 是我方招式 ID 序列）、`*` 戳擊、`+` 連段、`=` 防禦、`>` 對助跑出手、
-`<` 起身後撤、`^` 倒地起身、`!` 學到新東西或被抓、`(skip)` 看到但當下不能動、
-`THROWN` 被投前 20 個狀態變化。結尾統計有各類命中率、被誰打掉多少血、當時剛做了什麼、連段排名、回合勝負。
+`#n` hold, `~` throw answer (`ours:` is our move id sequence), `*` poke, `+` combo, `=` guard,
+`>` attack on a run-up, `<` wake-up backdash, `^` rising from the ground, `!` something learned or
+a grab, `(skip)` seen but unable to act, `THROWN` the last 20 state changes before a throw.
+The summary lists hit rates per category, damage taken by opponent move and by what we had just
+done, the combo ranking and the round tally.
 
-## 專案結構
+## Layout
 
-| 檔案 | 用途 |
+| File | Purpose |
 |---|---|
-| `holdbot.py` | 主程式：偵測 → 學習 → 面向探針 → Hold／防禦／投技回應／連段 |
-| `fields.py` + `layout.json` | 解析指標鏈、讀欄位 |
-| `pad.py` | 鍵盤／虛擬手把注入、Hold 對照表 |
-| `memlib.py` | `ReadProcessMemory` 封裝、記憶體區段列舉 |
-| `autoscan.py`、`probe.py`、`timeline.py`、`analyse2.py`、`pointerscan.py`、`scanner.py`、`watch.py`、`reanalyse.py` | 找欄位用的工具鏈；遊戲更新讓 `layout.json` 失效時重跑 |
-| `docs/NOTES.md` | 開發過程的技術筆記：位址怎麼找到的、每個欄位的實測值、DOA6 輸入的坑、各版本實戰結果 |
+| `holdbot.py` | Main loop: detect → learn → facing probe → hold / guard / throw answer / combo |
+| `fields.py` + `layout.json` | Pointer chain resolution and field reads |
+| `pad.py` | Keyboard / virtual pad injection, hold table |
+| `memlib.py` | `ReadProcessMemory` wrapper, region enumeration |
+| `autoscan.py`, `probe.py`, `timeline.py`, `analyse2.py`, `pointerscan.py`, `scanner.py`, `watch.py`, `reanalyse.py` | Field-hunting toolchain; rerun when a game update breaks `layout.json` |
+| `docs/NOTES.md` | Research log (Traditional Chinese): how the addresses were found, measured field values, DOA6 input pitfalls, match results per version |
 
-## 已知限制
+## Known limits
 
-- 鍵盤 `SendInput` 送不出斜方向 + 按鈕（3P、1P 等），所以連段池只有按鈕與水平方向。
-- 7 幀的突進投在 100 以內起手時沒有反應時間，只能靠先出拳。
-- 面向沒有記憶體欄位，靠走路 ID 探測；換邊後第一次 Hold 若剩餘幀數太少可能鏡像。
-- 位址表對應 2026-06 上市的 Last Round 版本；遊戲更新後要用工具鏈重找。
+- Keyboard `SendInput` cannot produce diagonal + button inputs (3P, 1P, ...), so combo pools use
+  buttons and horizontals only.
+- A 7-frame dash throw started inside 100 units leaves no reaction time; only a pre-emptive poke helps.
+- There is no facing field in memory; facing is probed from the walk animation id. The first hold
+  after a side swap can come out mirrored when very few frames remain.
+- The address table matches the Last Round build released 2026-06; after a game update the
+  toolchain has to be rerun.
 
-## 授權
+## License
 
-MIT License，見 `LICENSE`。
+MIT, see `LICENSE`.
