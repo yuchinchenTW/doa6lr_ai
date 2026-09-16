@@ -119,7 +119,7 @@ def candidates(cmd):
         return []
     digit = (cmd % 100) // 10
     out = [fam]                                  # the plain button first: string hits
-    if digit and digit in NUMPAD:
+    if digit and digit in NUMPAD and digit != 5:
         out.append(f"{digit}{fam}")
     for other in ("P", "K", "PK", "HK", "S"):
         if other != fam:
