@@ -140,7 +140,9 @@ def candidates(cmd, want_mv=None):
         out.append(MOVE_TABLE[want_mv])
     fam = FAMILY.get(cmd // 100)
     first = ["6S", "S"] if fam == "S" else ([fam] if fam else [])   # 6S: the Break Blow (8381)
-    for b in first + ["P", "PK", "K", "HK", "S"]:
+    # H: the Break Blow's follow-up on the stage screen was "-> S  H";
+    # 2P: the "down P on hit" task read cmd 2082, not the calibration's 1020
+    for b in first + ["P", "PK", "K", "HK", "S", "H", "2P", "6P", "4P", "2K"]:
         if b not in out:
             out.append(b)
     digit = (cmd % 100) // 10
@@ -314,7 +316,7 @@ def close_in(me, foe, inj, facing_right, want, timeout=2.5):
     the close-range tasks and our replay stood where it was, so half the
     moves whiffed. The walk id tells us if 'forward' is mirrored."""
     d = distance(me, foe)
-    if d is None or want is None or d <= want + 10:
+    if d is None or want is None or d <= want + 5:
         return d
     fwd = dirs_to_names(1 if facing_right else -1, 0)
     inj.down(fwd)
@@ -329,7 +331,7 @@ def close_in(me, foe, inj, facing_right, want, timeout=2.5):
             inj.down(fwd)
             flipped = True
         d = distance(me, foe)
-        if d is not None and d <= want + 10:
+        if d is not None and d <= want + 5:
             break
         time.sleep(0.005)
     inj.up(fwd)
@@ -400,7 +402,11 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         ids = []
         prev = steps[i - 1]["mv"] if i else None
         t1 = time.perf_counter()
-        limit = 0.35 if i + 1 < len(steps) else 1.2
+        # a follow-up that needs the previous move to HIT first (H+K -> P+K
+        # into the stance) can only be taken once the hit lands, ~0.4 s
+        # into a moving attack: keep re-pressing until the previous move
+        # ends, not for a fixed 0.35 s
+        limit = (0.35 if from_idle else 0.9) if i + 1 < len(steps) else 1.2
         again, t_last = 0, time.perf_counter()
         landed = False
         while time.perf_counter() - t1 < limit:
@@ -418,7 +424,10 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                     break
             elif ids:
                 break
-            elif (ok and used and not from_idle and again < 4
+            elif (not from_idle and mv in IDLE_MOVES and me.get("MoveKind") == 0
+                  and time.perf_counter() - t1 > 0.2):
+                break                        # the previous move ended: follow-up missed
+            elif (ok and used and not from_idle and again < 10
                   and time.perf_counter() - t_last > 0.07):
                 # a string follow-up the game did not take yet: the demo's
                 # "frame 1" is the game's own pre-loaded command, not a
