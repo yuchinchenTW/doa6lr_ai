@@ -385,6 +385,9 @@ def main():
                          "in at --poke-min..--poke-max, or is getting up close "
                          "by. Strikes beat throws: the 7-frame dash throw "
                          "(8340) cannot be reacted to, only pre-empted")
+    ap.add_argument("--close-throw-range", type=float, default=75.0,
+                    help="inside a fast unanswerable throw's reach, grab an idle "
+                         "opponent this close with our own T (0 disables)")
     ap.add_argument("--poke-min", type=float, default=60.0)
     ap.add_argument("--poke-max", type=float, default=190.0)
     ap.add_argument("--combo", default="auto",
@@ -1345,6 +1348,36 @@ def main():
     precrouch = None        # keys held while we sit under a fast throw's reach
     danger_cache = {"char": None, "t": 0.0, "reach": None, "mv": None, "su": None}
     danger_stats = [0, 0]   # pre-crouch episodes, danger back-offs
+    # Throw them first. Inside a fast throw's reach nothing reactive works
+    # (7 frames + 2 of lag), a poke is a 15-frame race we lose, but our own
+    # neutral T is ~5 frames: if they stand there, we grab them; if they
+    # start theirs in the same window, the earlier one wins. Scored per
+    # opponent character (close_throw.json) and dropped under 30%.
+    CT_FILE = "close_throw.json"
+    try:
+        with open(CT_FILE, encoding="utf-8") as fh:
+            ct_stats = json.load(fh)
+    except (OSError, ValueError):
+        ct_stats = {}
+    close_throw = {"t": 0.0, "hp0": None, "myhp0": None, "done": True}
+
+    def ct_allowed():
+        ok, n = ct_stats.get(str(fchar), [0, 0])
+        return n < 4 or ok / n >= 0.3
+
+    def ct_resolve(ok):
+        close_throw["done"] = True
+        st = ct_stats.setdefault(str(fchar), [0, 0])
+        st[0] += 1 if ok else 0
+        st[1] += 1
+        print(f"        T first {'grabbed them' if ok else 'did not connect'}  "
+              f"({st[0]}/{st[1]} vs char {fchar}"
+              + ("" if ct_allowed() else " - giving it up against this one") + ")")
+        try:
+            with open(CT_FILE, "w", encoding="utf-8") as fh:
+                json.dump(ct_stats, fh, indent=1, sort_keys=True)
+        except OSError:
+            pass
     zone_flip = [0.0, 0]    # last facing flip from the zoning walk, count
     salvage = [0.0, None]   # until when to watch a hold turning into a guard
     break_need = [args.gauge_max // 2]   # gauge estimate a 4S needs; learned
@@ -1872,6 +1905,13 @@ def main():
             if now - anchor_check[0] > 1.0:
                 anchor_check[0] = now
                 refresh_anchors()
+            if not close_throw["done"]:
+                if (foe.get("MoveType") == MT_THROWN
+                        or foe.get("CurrentHealth") < close_throw["hp0"]):
+                    ct_resolve(True)
+                elif (me.get("CurrentHealth") < close_throw["myhp0"]
+                      or now - close_throw["t"] > 0.8):
+                    ct_resolve(False)
             if not last_answer["done"] and now - last_answer["t"] > 1.5:
                 record_answer(True)
             if not side_confirmed[0] and not args.dry_run and now - side_next[0] > 1.0:
@@ -2448,6 +2488,21 @@ def main():
                 d_reach = danger_reach() if not args.dry_run else None
                 in_danger = (d_reach is not None and foe_idle
                              and d_now <= d_reach + 25)
+                if (in_danger and d_now <= args.close_throw_range and my_free
+                        and my_mv_now == 0 and precrouch is None and ct_allowed()
+                        and close_throw["done"] and now - last_fire > 0.5
+                        and mv in (0, 1, 2, 3)):
+                    if zoning is not None:
+                        inj.up(zoning); zoning = None
+                    inj.down(["throw"]); time.sleep(args.press); inj.up(["throw"])
+                    close_throw.update(t=now, hp0=foe.get("CurrentHealth"),
+                                       myhp0=me.get("CurrentHealth"), done=False)
+                    last_fire = now
+                    last_action[:] = ["throw", now]
+                    print(f"  T    inside {danger_cache['mv']}'s reach at {d_now:.0f}: "
+                          f"throwing first")
+                    time.sleep(period)
+                    continue
                 if precrouch is not None and not (in_danger and now < cornered[0]):
                     inj.up(precrouch); precrouch = None      # room again, or they moved
                 if (in_danger and now < cornered[0] and precrouch is None
@@ -3182,6 +3237,9 @@ def main():
                 for k, (ok, n) in sorted(escape["by"].items()):
                     print(f"    {k:<32} {ok}/{n}")
             if danger_stats[0] or danger_stats[1]:
+                ct = ct_stats.get(str(fchar))
+                if ct:
+                    print(f"  T first inside the danger reach: {ct[0]}/{ct[1]} grabbed them (char {fchar})")
                 print(f"  fast-throw danger zone: backed off {danger_stats[1]}x, "
                       f"crouched under it {danger_stats[0]}x")
             esc = {k: v for k, v in throw_esc.items() if k.startswith("cmd")}
