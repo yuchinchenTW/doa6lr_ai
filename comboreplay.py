@@ -383,7 +383,9 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                 # that interval, re-pressing until well after it.
                 want_mv = steps[i - 1]["mv"]
                 dt = s.get("dt") or 0.0
-                lead = max(0.0, dt - 0.12 - lag_frames / 60)
+                # only just ahead of the demo's interval: P+K 0.15 s before
+                # the H+K hit came out as a plain P+K (8119), not the stance
+                lead = max(0.0, dt - 0.05 - lag_frames / 60)
                 while time.perf_counter() - t0 < max(1.0, dt + 0.3):
                     me.refresh()
                     mv = me.get("CurrentMove")
