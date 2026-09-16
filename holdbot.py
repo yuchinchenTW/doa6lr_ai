@@ -1915,8 +1915,12 @@ def main():
                 anchor_check[0] = now
                 refresh_anchors()
             if not close_throw["done"]:
-                if (foe.get("MoveType") == MT_THROWN
-                        or foe.get("CurrentHealth") < close_throw["hp0"]):
+                # both sides read type 5 during a throw: only THEIR type 5
+                # while we are not being thrown, or their health dropping,
+                # means our T connected (one 8137 grab was booked as a success)
+                if (foe.get("CurrentHealth") < close_throw["hp0"]
+                        or (foe.get("MoveType") == MT_THROWN
+                            and me.get("MoveType") != MT_THROWN)):
                     ct_resolve(True)
                 elif (me.get("CurrentHealth") < close_throw["myhp0"]
                       or now - close_throw["t"] > 0.8):
@@ -2500,7 +2504,8 @@ def main():
                 ct_mode = ("idle" if my_mv_now == 0 else
                            "walk" if (my_mv_now in BACK_IDS and zoning is not None) else None)
                 if (args.close_throw_range > 0 and foe_idle and ct_mode is not None
-                        and d_now <= args.close_throw_range and my_free
+                        and d_now <= args.close_throw_range
+                        and (my_free or ct_mode == "walk")     # a back DASH (4) is not "free"
                         and precrouch is None and ct_allowed(ct_mode)
                         and close_throw["done"] and now - last_fire > 0.5
                         and mv in (0, 1, 2, 3)):
