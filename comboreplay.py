@@ -1,0 +1,256 @@
+"""
+comboreplay.py - Combo Challenge: watch the game's own demonstration, then
+play the same inputs back.
+
+In Combo Challenge the game demonstrates the required combo on request. The
+demo drives OUR character, so every input it makes shows up in memory as a
+CommandCode change (P = 1000, 6P = 1060, K = 1100, 2K = 1120: button base
+plus numpad digit x 10) together with the move id it produced and the frame
+of the previous move at which the next command registered. That is the
+whole recipe: which inputs, and when.
+
+    python comboreplay.py                 # facing right (P1 on the left)
+    python comboreplay.py --facing left
+
+Flow, all from inside the game:
+    1. start the demonstration (the game's own button for it)
+       -> the tool records automatically and prints the decoded sequence
+    2. F8   replay the last recording (as often as you like)
+       F5   forget it and wait for a new demonstration
+       F7   save the recording to demo.json
+       F10  quit
+
+Decoding: known bases P 1000 / K 1100; PK, HK and S are guesses (1200 /
+1300 / 1400) until a demo shows them - unknown codes are printed raw as
+cmdNNNN and replayed as nothing, so compare the printout with the input
+list on screen and report what the raw ones were.
+"""
+import argparse
+import ctypes
+import json
+import sys
+import time
+
+from fields import load_layout, locate_all
+from holdbot import Side
+from memlib import Process, find_pid
+from pad import KeyboardInjector, dirs_to_names
+
+u32 = ctypes.WinDLL("user32", use_last_error=True)
+VK = {"F5": 0x74, "F7": 0x76, "F8": 0x77, "F10": 0x79}
+
+BUTTON_BASE = {1000: "P", 1100: "K", 1200: "PK", 1300: "HK", 1400: "S"}
+BUTTON_KEY = {"P": "punch", "K": "kick", "PK": "pk", "HK": "hk", "S": "special",
+              "T": "throw", "H": "free"}
+NUMPAD = {1: (-1, -1), 2: (0, -1), 3: (1, -1), 4: (-1, 0), 5: (0, 0),
+          6: (1, 0), 7: (-1, 1), 8: (0, 1), 9: (1, 1)}
+IDLE_MOVES = (0, 1, 2, 3, 4)
+
+
+def decode(cmd):
+    """CommandCode -> (numpad digit or 0, button token) or None."""
+    if cmd == 363:
+        return 0, "T"
+    if 364 <= cmd <= 369:
+        return {364: 6, 365: 4, 366: 2, 367: 1, 368: 8, 369: 3}[cmd], "T"
+    if cmd == 168:
+        return 0, "H"
+    for base, btn in BUTTON_BASE.items():
+        if base <= cmd < base + 100 and (cmd - base) % 10 == 0:
+            return (cmd - base) // 10, btn
+    return None
+
+
+def token(cmd):
+    d = decode(cmd)
+    if d is None:
+        return f"cmd{cmd}"
+    digit, btn = d
+    return f"{digit if digit else ''}{btn}"
+
+
+class Hotkeys:
+    def __init__(self):
+        self.down = set()
+
+    def pressed(self):
+        hits = []
+        for name, vk in VK.items():
+            is_down = bool(u32.GetAsyncKeyState(vk) & 0x8000)
+            if is_down and name not in self.down:
+                hits.append(name)
+            (self.down.add if is_down else self.down.discard)(name)
+        return hits
+
+
+def record(me, foe, hot):
+    """Wait for the demonstration to start, log every command / move change
+    until both characters have been idle for 1.2 s. Returns the event list."""
+    print("waiting for the demonstration (start it in the game)...")
+    events = []
+    started = None
+    last_cmd = last_mv = None
+    idle_since = None
+    while True:
+        for k in hot.pressed():
+            if k == "F10":
+                return None
+        me.refresh(); foe.refresh()
+        cmd, mv, fr = me.get("CommandCode"), me.get("CurrentMove"), me.get("CurrentMoveFrame")
+        now = time.perf_counter()
+        if started is None:
+            if mv not in IDLE_MOVES and me.get("MoveKind") in (3, 16, 5):
+                started = now
+                last_cmd, last_mv = cmd, None
+                print("  demo started")
+            else:
+                last_cmd = cmd
+                time.sleep(0.002)
+                continue
+        if cmd != last_cmd and cmd:
+            events.append({"t": round(now - started, 3), "cmd": int(cmd), "tok": token(cmd),
+                           "prev_mv": int(last_mv) if last_mv is not None else int(mv),
+                           "prev_fr": int(fr)})
+            print(f"  {now - started:6.3f}s  input {token(cmd):<6} (cmd {cmd})  "
+                  f"during move {last_mv if last_mv is not None else mv} frame {fr}")
+        if mv != last_mv:
+            events.append({"t": round(now - started, 3), "mv": int(mv), "kind": int(me.get("MoveKind"))})
+            last_mv = mv
+        last_cmd = cmd
+        both_idle = (mv in IDLE_MOVES and me.get("MoveKind") == 0
+                     and foe.get("MoveKind") == 0 and foe.get("CurrentMove") in IDLE_MOVES + (127, 131, 135))
+        if both_idle and now - started > 1.0:
+            idle_since = idle_since or now
+            if now - idle_since > 1.2:
+                break
+        else:
+            idle_since = None
+        time.sleep(0.001)
+    return events
+
+
+def plan(events):
+    """Turn the raw event list into replay steps: (token, move produced,
+    press when the previous produced move reaches this frame)."""
+    steps = []
+    for i, e in enumerate(events):
+        if "cmd" not in e:
+            continue
+        produced = None
+        for f in events[i + 1:]:
+            if "mv" in f and f["mv"] not in IDLE_MOVES:
+                produced = f["mv"]
+                break
+            if "cmd" in f:
+                break
+        steps.append({"tok": e["tok"], "cmd": e["cmd"], "prev_mv": e["prev_mv"],
+                      "prev_fr": e["prev_fr"], "mv": produced})
+    return steps
+
+
+def press(inj, tok_cmd, facing_right, hold=0.045):
+    d = decode(tok_cmd)
+    if d is None:
+        return False
+    digit, btn = d
+    dx, dy = NUMPAD.get(digit, (0, 0)) if digit else (0, 0)
+    if not facing_right:
+        dx = -dx
+    names = dirs_to_names(dx, dy)
+    key = BUTTON_KEY[btn]
+    if names:
+        inj.down(names)             # both direction keys in ONE SendInput
+        time.sleep(0.017)           # a frame ahead of the button
+    inj.down([key])
+    time.sleep(hold)
+    inj.up([key])
+    inj.up(names)
+    return True
+
+
+def replay(me, steps, inj, facing_right, lag_frames=2):
+    print(f"replaying {len(steps)} input(s): " + " ".join(s["tok"] for s in steps))
+    me.refresh()
+    results = []
+    for i, s in enumerate(steps):
+        if i > 0:
+            # wait for the previous produced move, then for its frame
+            want_mv, want_fr = steps[i - 1]["mv"], max(1, s["prev_fr"] - lag_frames)
+            t0 = time.perf_counter()
+            while time.perf_counter() - t0 < 1.0:
+                me.refresh()
+                mv, fr = me.get("CurrentMove"), me.get("CurrentMoveFrame")
+                if (want_mv is None or mv == want_mv) and fr >= want_fr and mv not in IDLE_MOVES:
+                    break
+                if mv in IDLE_MOVES and time.perf_counter() - t0 > 0.25:
+                    break               # the string dropped: press anyway
+                time.sleep(0.001)
+        ok = press(inj, s["cmd"], facing_right)
+        # what came out
+        got = None
+        t1 = time.perf_counter()
+        while time.perf_counter() - t1 < 0.35:
+            me.refresh()
+            mv = me.get("CurrentMove")
+            if mv not in IDLE_MOVES and mv != (steps[i - 1]["mv"] if i else None):
+                got = mv
+                break
+            time.sleep(0.001)
+        results.append((s["tok"], s["mv"], got))
+        print(f"  {i + 1:>2}. {s['tok']:<6} wanted move {s['mv']}  got {got}"
+              + ("" if ok else "  (unknown code, nothing pressed)")
+              + ("  OK" if got == s["mv"] else ""))
+    hits = sum(1 for _, w, g in results if w == g)
+    print(f"  {hits}/{len(results)} moves matched the demonstration")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--process", default=None)
+    ap.add_argument("--me", default="P1", choices=["P1", "P2"])
+    ap.add_argument("--facing", default="right", choices=["right", "left"],
+                    help="which way our character faces at the start of the combo")
+    ap.add_argument("--lag-frames", type=int, default=2,
+                    help="press this many frames earlier than the demo did (input lag)")
+    args = ap.parse_args()
+
+    layout = load_layout()
+    pid = find_pid(args.process or layout["process"])
+    if pid is None:
+        print("game not running"); sys.exit(1)
+    proc = Process(pid)
+    anchors = locate_all(proc, layout)
+    if any(v is None for v in anchors.values()):
+        print(f"anchors did not resolve: {anchors}"); sys.exit(2)
+    foe_side = "P2" if args.me == "P1" else "P1"
+    me, foe = Side(proc, layout, anchors, args.me), Side(proc, layout, anchors, foe_side)
+    inj = KeyboardInjector()
+    hot = Hotkeys()
+    facing_right = args.facing == "right"
+
+    steps = None
+    while True:
+        events = record(me, foe, hot)
+        if events is None:
+            break
+        steps = plan(events)
+        print("\nrecorded: " + "  ".join(f"{s['tok']}->{s['mv']}@{s['prev_fr']}" for s in steps))
+        print("F8 replay   F5 record again   F7 save   F10 quit")
+        while True:
+            keys = hot.pressed()
+            if "F10" in keys:
+                inj.release_all(); return
+            if "F5" in keys:
+                break
+            if "F7" in keys:
+                with open("demo.json", "w", encoding="utf-8") as fh:
+                    json.dump({"events": events, "steps": steps}, fh, indent=1)
+                print("  saved demo.json")
+            if "F8" in keys:
+                replay(me, steps, inj, facing_right, args.lag_frames)
+                print("F8 replay   F5 record again   F7 save   F10 quit")
+            time.sleep(0.01)
+
+
+if __name__ == "__main__":
+    main()
