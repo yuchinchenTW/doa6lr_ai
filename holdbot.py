@@ -2451,7 +2451,9 @@ def main():
                 if precrouch is not None and not (in_danger and now < cornered[0]):
                     inj.up(precrouch); precrouch = None      # room again, or they moved
                 if (in_danger and now < cornered[0] and precrouch is None
-                        and my_mv_now == 0 and me.get("MoveType") == MT_IDLE):
+                        and my_mv_now == 0 and my_free):
+                    # (my_free, not MoveType 2: our side reads type 1 while
+                    # standing idle in some matches - 61 back-offs, 0 crouches)
                     # cornered inside the reach: a poke here is a hi-counter
                     # throw for them. Sit down - the standing throw whiffs on
                     # a croucher - until they move or we get room
@@ -2625,9 +2627,12 @@ def main():
                                                     # 125-135 come out as 80-91
             if precrouch is not None and (incoming_strike or incoming_throw):
                 # sitting under a fast throw's reach: a strike needs us up
-                # (holds are skipped from 10/13); a throw wants exactly this
-                # crouch, so keep it and let the duck answer run
-                if incoming_strike:
+                # (holds are skipped from 10/13); a standing throw wants
+                # exactly this crouch, so keep it and let the duck answer
+                # run. A LOW throw (char 2's 8161, the other half of its
+                # mixup) grabs crouchers: stand up at once
+                t_cmd0, t_hml0 = throw_cmd.get(mv, (None, None))
+                if incoming_strike or (incoming_throw and throw_class(t_cmd0, t_hml0) == "low"):
                     inj.up(precrouch); precrouch = None
                 elif my_move in (10, 13):
                     busy = False
