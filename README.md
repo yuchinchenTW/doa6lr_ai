@@ -1,5 +1,7 @@
 # doa6lr_ai — DOA6 Last Round 自動 Hold／反擊機器人
 
+繁體中文 | [English](README.en.md)
+
 An auto-hold / anti-CPU bot for **Dead or Alive 6 Last Round** (`DOA6LR.exe`, 64-bit, Windows).
 It reads the opponent's move state straight out of game memory, picks the counter hold,
 and sends keyboard input inside the startup window. Offline use only.
@@ -17,7 +19,7 @@ and sends keyboard input inside the startup window. Offline use only.
 - 對手每一招的發生幀、投技類型、攻擊性投技（OH）、不能 Hold 的招、每個投技最好的回應方式，全部在對局中**自動學習並存成 JSON**，下次啟動直接沿用。
 - 連段以「淨傷害 = 打出 − 被打」自動比較（多臂吃角子老虎），每個自己的角色分開統計。
 - 對手換人（連戰模式）、自己坐 P1 或 P2、遊戲設 3-way 或 4-way Hold、刻意加的輸入延遲，都會自動偵測或用旗標對應。
-- 已建進攻表的角色：女天狗（id 21）、不知火舞（id 30）。其他角色用通用連段池。
+- **目前只用女天狗（id 21）和不知火舞（id 30）訓練過。** 進攻表（戳擊、連段池）只有這兩隻，連段統計也只有這兩隻的資料；其他角色會退回通用連段池與 P 戳擊，要從零重新累積。對手方面，`startup.json` 等表只涵蓋實際遇過的 CPU 角色，沒遇過的角色第一次見到每一招都要先學（沒學過的招預設防禦）。
 
 ## 需求
 
