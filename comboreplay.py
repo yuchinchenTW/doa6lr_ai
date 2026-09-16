@@ -53,6 +53,7 @@ IDLE_MOVES = (0, 1, 2, 3, 4)
 
 CMD_TABLE = {}      # cmd -> (token, button held)  from commands.json (--calibrate)
 MOVE_TABLE = {}     # move id -> token that produced it in the calibration
+HINTS = {}          # cmd -> token to try FIRST (read off the stage's task list)
 
 
 def load_commands(path="commands.json"):
@@ -81,6 +82,8 @@ def load_commands(path="commands.json"):
     # codes learned by replaying (cmd -> token that produced the wanted move)
     for c_s, tok in table.get("_learned", {}).items():
         CMD_TABLE[int(c_s)] = (tok, False)
+    for c_s, tok in table.get("_hints", {}).items():
+        HINTS[int(c_s)] = tok
     # (the "+10 = button held" rule is gone: 5510 is the second S of the
     # Fatal Rush, 5780 is the 46P+K motion)
 
@@ -136,7 +139,9 @@ def candidates(cmd, want_mv=None):
     calibration token that produced the wanted move id if we have one, then
     every button, the code's own family first."""
     out = []
-    if want_mv in MOVE_TABLE:
+    if cmd in HINTS:
+        out.append(HINTS[cmd])
+    if want_mv in MOVE_TABLE and MOVE_TABLE[want_mv] not in out:
         out.append(MOVE_TABLE[want_mv])
     fam = FAMILY.get(cmd // 100)
     first = ["6S", "S"] if fam == "S" else ([fam] if fam else [])   # 6S: the Break Blow (8381)
