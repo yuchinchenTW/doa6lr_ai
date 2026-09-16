@@ -347,8 +347,59 @@ def calibrate(sides, inj, facing_right, hot):
     print("saved commands.json")
 
 
+def probe(sides, inj, facing_right, hot, want_cmd, btn="PK"):
+    """Try a list of input recipes for one button until the game answers
+    with the wanted CommandCode. For the stage whose demo reads cmd 5780
+    (6P+K reads 5770): the screen says 'hold left/right + P+K'."""
+    me = sides["P1"]
+    key = BUTTON_KEY[btn]
+    f, b = dirs_to_names(1 if facing_right else -1, 0), dirs_to_names(-1 if facing_right else 1, 0)
+    recipes = [
+        ("6 held 1.2s then " + btn,      lambda: (inj.down(f), time.sleep(1.2), inj.down([key]), time.sleep(0.05), inj.up([key] + f))),
+        ("4 held 1.2s then " + btn,      lambda: (inj.down(b), time.sleep(1.2), inj.down([key]), time.sleep(0.05), inj.up([key] + b))),
+        ("66 (dash) then " + btn,        lambda: (inj.down(f), time.sleep(0.03), inj.up(f), time.sleep(0.03), inj.down(f), time.sleep(0.05), inj.down([key]), time.sleep(0.05), inj.up([key] + f))),
+        ("44 (backdash) then " + btn,    lambda: (inj.down(b), time.sleep(0.03), inj.up(b), time.sleep(0.03), inj.down(b), time.sleep(0.05), inj.down([key]), time.sleep(0.05), inj.up([key] + b))),
+        ("6 + " + btn + " both held 1.5s", lambda: (inj.down(f), time.sleep(0.017), inj.down([key]), time.sleep(1.5), inj.up([key] + f))),
+        ("4 + " + btn + " both held 1.5s", lambda: (inj.down(b), time.sleep(0.017), inj.down([key]), time.sleep(1.5), inj.up([key] + b))),
+        ("left+right together + " + btn, lambda: (inj.down(f + b), time.sleep(0.017), inj.down([key]), time.sleep(0.05), inj.up([key] + f + b))),
+        ("6 then release, " + btn + " within 2 frames", lambda: (inj.down(f), time.sleep(0.3), inj.up(f), time.sleep(0.02), inj.down([key]), time.sleep(0.05), inj.up([key]))),
+    ]
+    print(f"probing for cmd {want_cmd} with {btn}. F10 aborts.")
+    for name, do in recipes:
+        if "F10" in hot.pressed():
+            break
+        t0 = time.perf_counter()
+        while time.perf_counter() - t0 < 3.0:
+            me.refresh()
+            if me.get("CurrentMove") in IDLE_MOVES and me.get("MoveKind") == 0:
+                break
+            time.sleep(0.005)
+        time.sleep(0.3)
+        do()
+        inj.release_all()
+        got_cmd, ids = None, []
+        t1 = time.perf_counter()
+        while time.perf_counter() - t1 < 1.8:
+            me.refresh()
+            c, m = me.get("CommandCode"), me.get("CurrentMove")
+            if m not in IDLE_MOVES:
+                if not ids:
+                    got_cmd = int(c) if c else None
+                if not ids or ids[-1] != m:
+                    ids.append(int(m))
+            elif ids and time.perf_counter() - t1 > 0.3:
+                break
+            time.sleep(0.002)
+        mark = "  <== MATCH" if got_cmd == want_cmd else ""
+        print(f"  {name:<36} -> cmd {got_cmd}  move {'>'.join(map(str, ids)) if ids else None}{mark}")
+        time.sleep(0.5)
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--probe-cmd", type=int, default=None,
+                    help="try input recipes for --probe-btn until this CommandCode appears")
+    ap.add_argument("--probe-btn", default="PK", choices=list(BUTTON_KEY))
     ap.add_argument("--calibrate", action="store_true",
                     help="press every input once and print the cmd / move it produces")
     ap.add_argument("--process", default=None)
@@ -382,6 +433,10 @@ def main():
     facing_right = args.facing == "right"
     if args.calibrate:
         calibrate(sides, inj, facing_right, hot)
+        inj.release_all()
+        return
+    if args.probe_cmd:
+        probe(sides, inj, facing_right, hot, args.probe_cmd, args.probe_btn)
         inj.release_all()
         return
 
