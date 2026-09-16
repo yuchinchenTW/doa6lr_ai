@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.npz
+hunt_*.json
+scan_result.json
+pointer_paths.json
+*.log

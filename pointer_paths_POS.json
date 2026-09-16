@@ -1,0 +1,27 @@
+{
+  "process": "DOA6LR.exe",
+  "target": 1834692222976,
+  "paths": [
+    {
+      "module_offset": 98237712,
+      "offsets": [
+        0
+      ],
+      "depth": 1
+    },
+    {
+      "module_offset": 98237888,
+      "offsets": [
+        0
+      ],
+      "depth": 1
+    },
+    {
+      "module_offset": 98237912,
+      "offsets": [
+        0
+      ],
+      "depth": 1
+    }
+  ]
+}

@@ -1,0 +1,182 @@
+{
+  "process": "DOA6LR.exe",
+  "target": 1834693387504,
+  "paths": [
+    {
+      "module_offset": 99636720,
+      "offsets": [
+        224,
+        1136
+      ],
+      "depth": 2
+    },
+    {
+      "module_offset": 99636728,
+      "offsets": [
+        240,
+        1136
+      ],
+      "depth": 2
+    },
+    {
+      "module_offset": 99636720,
+      "offsets": [
+        208,
+        2256
+      ],
+      "depth": 2
+    },
+    {
+      "module_offset": 99636728,
+      "offsets": [
+        224,
+        2256
+      ],
+      "depth": 2
+    },
+    {
+      "module_offset": 133518224,
+      "offsets": [
+        8,
+        920,
+        48
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 133517656,
+      "offsets": [
+        8,
+        936,
+        48
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 133517656,
+      "offsets": [
+        24,
+        920,
+        48
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 99467936,
+      "offsets": [
+        1056,
+        1184,
+        16
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 99467936,
+      "offsets": [
+        1064,
+        1200,
+        16
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 99467888,
+      "offsets": [
+        1088,
+        1184,
+        16
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 99467928,
+      "offsets": [
+        1088,
+        1184,
+        16
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 99467888,
+      "offsets": [
+        1096,
+        1200,
+        16
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 99467928,
+      "offsets": [
+        1096,
+        1200,
+        16
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 99468008,
+      "offsets": [
+        1184,
+        1184,
+        16
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 99468008,
+      "offsets": [
+        1192,
+        1200,
+        16
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 99636720,
+      "offsets": [
+        0,
+        160,
+        2256
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 99636728,
+      "offsets": [
+        16,
+        160,
+        2256
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 99353896,
+      "offsets": [
+        1280,
+        1184,
+        16
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 99467936,
+      "offsets": [
+        1040,
+        1440,
+        16
+      ],
+      "depth": 3
+    },
+    {
+      "module_offset": 99353896,
+      "offsets": [
+        1288,
+        1200,
+        16
+      ],
+      "depth": 3
+    }
+  ]
+}
