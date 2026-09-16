@@ -258,9 +258,12 @@ def plan(events):
     """Turn the raw event list into replay steps: (token, move produced,
     press when the previous produced move reaches this frame)."""
     steps = []
+    t_prev = None
     for i, e in enumerate(events):
         if "cmd" not in e:
             continue
+        dt = None if t_prev is None else round(e["t"] - t_prev, 3)
+        t_prev = e["t"]
         produced = None
         for f in events[i + 1:]:
             if "mv" in f and f["mv"] not in IDLE_MOVES:
@@ -269,7 +272,8 @@ def plan(events):
             if "cmd" in f:
                 break
         steps.append({"tok": e["tok"], "cmd": e["cmd"], "prev_mv": e["prev_mv"],
-                      "prev_fr": e["prev_fr"], "mv": produced, "dist": e.get("dist")})
+                      "prev_fr": e["prev_fr"], "mv": produced, "dist": e.get("dist"),
+                      "dt": dt})
     return steps
 
 
@@ -321,7 +325,7 @@ def close_in(me, foe, inj, facing_right, want, timeout=2.5):
     the close-range tasks and our replay stood where it was, so half the
     moves whiffed. The walk id tells us if 'forward' is mirrored."""
     d = distance(me, foe)
-    if d is None or want is None or d <= want + 5:
+    if d is None or want is None or d <= want + 3:
         return d
     fwd = dirs_to_names(1 if facing_right else -1, 0)
     inj.down(fwd)
@@ -336,7 +340,7 @@ def close_in(me, foe, inj, facing_right, want, timeout=2.5):
             inj.down(fwd)
             flipped = True
         d = distance(me, foe)
-        if d is not None and d <= want + 5:
+        if d is not None and d <= want + 3:
             break
         time.sleep(0.005)
     inj.up(fwd)
@@ -354,6 +358,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
     print(f"replaying {len(steps)} input(s): " + " ".join(s["tok"] for s in steps))
     me.refresh()
     results, learned = [], {}
+    t_prev_press = time.perf_counter()
     for i, s in enumerate(steps):
         from_idle = s["prev_mv"] in IDLE_MOVES
         if s["cmd"] in MOVE_CMDS or s["cmd"] == 135:
@@ -371,13 +376,21 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                     time.sleep(0.001)
                 time.sleep(0.03)
             else:
-                want_mv, want_fr = steps[i - 1]["mv"], max(1, s["prev_fr"] - lag_frames)
-                while time.perf_counter() - t0 < 1.0:
+                # The demo's "frame 1" is the game pre-loading its own next
+                # command; the real timing is the interval between the two
+                # inputs (H+K -> P+K came 0.39 s later, when the kick hit;
+                # the Break Blow's H 1.05 s later). Press from a bit before
+                # that interval, re-pressing until well after it.
+                want_mv = steps[i - 1]["mv"]
+                dt = s.get("dt") or 0.0
+                lead = max(0.0, dt - 0.12 - lag_frames / 60)
+                while time.perf_counter() - t0 < max(1.0, dt + 0.3):
                     me.refresh()
-                    mv, fr = me.get("CurrentMove"), me.get("CurrentMoveFrame")
-                    if (want_mv is None or mv == want_mv) and fr >= want_fr and mv not in IDLE_MOVES:
+                    mv = me.get("CurrentMove")
+                    since = time.perf_counter() - t_prev_press
+                    if since >= lead and (want_mv is None or mv == want_mv or mv not in IDLE_MOVES):
                         break
-                    if mv in IDLE_MOVES and time.perf_counter() - t0 > 0.25:
+                    if mv in IDLE_MOVES and me.get("MoveKind") == 0 and since > max(0.25, dt + 0.1):
                         break               # the string dropped: press anyway
                     time.sleep(0.001)
         d_now = None
@@ -385,6 +398,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             d_now = close_in(me, foe, inj, facing_right, s.get("dist"))
         cmd = s["cmd"]
         used = None
+        t_prev_press = time.perf_counter()
         if decode(cmd) is not None:
             ok = press(inj, cmd, facing_right)
             used = token(cmd)
@@ -400,7 +414,12 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             if cands:
                 n = tries.get((cmd, s["mv"]), 0)
                 used = cands[n % len(cands)]
-                tries[(cmd, s["mv"])] = n + 1
+                # a follow-up whose previous step did not come out was never
+                # really tested: keep the same candidate next time
+                prev_ok = from_idle or (results and results[-1][1] is not None
+                                        and results[-1][1] in results[-1][2])
+                if prev_ok:
+                    tries[(cmd, s["mv"])] = n + 1
                 ok = press(inj, cmd, facing_right, tok=used)
             else:
                 ok = False
@@ -411,7 +430,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         # into the stance) can only be taken once the hit lands, ~0.4 s
         # into a moving attack: keep re-pressing until the previous move
         # ends, not for a fixed 0.35 s
-        limit = (0.35 if from_idle else 0.9) if i + 1 < len(steps) else 1.2
+        limit = (0.35 if from_idle else max(0.9, (s.get("dt") or 0) + 0.5)) if i + 1 < len(steps) else 1.2
         again, t_last = 0, time.perf_counter()
         landed = False
         while time.perf_counter() - t1 < limit:
