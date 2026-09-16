@@ -1361,20 +1361,27 @@ def main():
             ct_stats = json.load(fh)
     except (OSError, ValueError):
         ct_stats = {}
-    close_throw = {"t": 0.0, "hp0": None, "myhp0": None, "done": True}
+    close_throw = {"t": 0.0, "hp0": None, "myhp0": None, "done": True, "mode": "idle"}
 
-    def ct_allowed():
-        ok, n = ct_stats.get(str(fchar), [0, 0])
+    def ct_key(mode):
+        # "walk": T pressed right after letting go of the back key - the game
+        # may read it as 4T; scored apart from the standing version (15/17)
+        return str(fchar) if mode == "idle" else f"walk:{fchar}"
+
+    def ct_allowed(mode="idle"):
+        ok, n = ct_stats.get(ct_key(mode), [0, 0])
         return n < 4 or ok / n >= 0.3
 
     def ct_resolve(ok):
         close_throw["done"] = True
-        st = ct_stats.setdefault(str(fchar), [0, 0])
+        mode = close_throw["mode"]
+        st = ct_stats.setdefault(ct_key(mode), [0, 0])
         st[0] += 1 if ok else 0
         st[1] += 1
-        print(f"        T first {'grabbed them' if ok else 'did not connect'}  "
+        print(f"        T first{' out of the walk' if mode == 'walk' else ''} "
+              f"{'grabbed them' if ok else 'did not connect'}  "
               f"({st[0]}/{st[1]} vs char {fchar}"
-              + ("" if ct_allowed() else " - giving it up against this one") + ")")
+              + ("" if ct_allowed(mode) else " - giving it up against this one") + ")")
         try:
             with open(CT_FILE, "w", encoding="utf-8") as fh:
                 json.dump(ct_stats, fh, indent=1, sort_keys=True)
@@ -2490,19 +2497,26 @@ def main():
                 d_reach = danger_reach() if not args.dry_run else None
                 in_danger = (d_reach is not None and foe_idle
                              and d_now <= d_reach + 25)
-                if (args.close_throw_range > 0 and foe_idle
+                ct_mode = ("idle" if my_mv_now == 0 else
+                           "walk" if (my_mv_now in BACK_IDS and zoning is not None) else None)
+                if (args.close_throw_range > 0 and foe_idle and ct_mode is not None
                         and d_now <= args.close_throw_range and my_free
-                        and my_mv_now == 0 and precrouch is None and ct_allowed()
+                        and precrouch is None and ct_allowed(ct_mode)
                         and close_throw["done"] and now - last_fire > 0.5
                         and mv in (0, 1, 2, 3)):
+                    # also out of the back-off walk: 8137 caught us walking
+                    # back inside its reach twice in one match, the standing
+                    # T first never got the chance
                     if zoning is not None:
                         inj.up(zoning); zoning = None
+                        time.sleep(0.02)
                     inj.down(["throw"]); time.sleep(args.press); inj.up(["throw"])
                     close_throw.update(t=now, hp0=foe.get("CurrentHealth"),
-                                       myhp0=me.get("CurrentHealth"), done=False)
+                                       myhp0=me.get("CurrentHealth"), done=False,
+                                       mode=ct_mode)
                     last_fire = now
                     last_action[:] = ["throw", now]
-                    print(f"  T    idle at {d_now:.0f}: throwing first"
+                    print(f"  T    {'idle' if ct_mode == 'idle' else 'walking back'} at {d_now:.0f}: throwing first"
                           + (f"  (inside {danger_cache['mv']}'s reach)" if in_danger else ""))
                     time.sleep(period)
                     continue
@@ -3246,9 +3260,12 @@ def main():
                     print(f"    {k:<32} {ok}/{n}")
             if danger_stats[0] or danger_stats[1]:
                 ct = ct_stats.get(str(fchar))
-                if ct:
+                ctw = ct_stats.get(f"walk:{fchar}")
+                if ct or ctw:
                     print(f"  T first on an idle opponent inside {args.close_throw_range:.0f}: "
-                          f"{ct[0]}/{ct[1]} grabbed them (char {fchar})")
+                          + (f"standing {ct[0]}/{ct[1]}" if ct else "standing 0/0")
+                          + (f", out of the walk {ctw[0]}/{ctw[1]}" if ctw else "")
+                          + f" grabbed them (char {fchar})")
                 print(f"  fast-throw danger zone: backed off {danger_stats[1]}x, "
                       f"crouched under it {danger_stats[0]}x")
             esc = {k: v for k, v in throw_esc.items() if k.startswith("cmd")}
