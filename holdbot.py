@@ -79,8 +79,10 @@ ESCAPES_FILE = "throw_escapes.json"  # {"cmd<CommandCode>": {"T": [ok, n], "6T":
 # a throw is broken by matching its command: plain T for a neutral throw
 # (cmd 363, 4/4 with T), direction + T for a command throw. First guess by
 # the CommandCode seen at the start, then learn per throw like the answers.
+# calibration (comboreplay --calibrate, Nyotengu): our own 6T reads cmd 364,
+# 4T reads 1349, 2T reads 366 - so 365 is NOT 4T (left to the scoreboard)
 ESCAPE_GUESS = {363: "T", 400: "T",          # both broke with T every time (4/4, 2/2, 1/1 x3)
-                364: "6T", 365: "4T", 366: "2T", 367: "2T"}
+                364: "6T", 1349: "4T", 366: "2T", 367: "2T"}
 ESCAPE_OPTIONS = ("T", "6T", "4T", "2T")
 NOHOLD_FILE = "nohold.json"      # {char: [move ids]} - strikes our hold "caught" for 0 dmg
 STUN_FILE = "stun_holds.json"    # {our reaction id: [landed, tried]} - holds attempted
