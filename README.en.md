@@ -78,6 +78,7 @@ Full list: `python holdbot.py --help`.
 | `startup.json` | opponent character + move | Frame the move goes active (the frame Phase turns 0→1) |
 | `throws.json` | opponent character + move | CommandCode and high/mid/low of each throw |
 | `throw_answers.json` | opponent character + move | Successes of crouch / back / side / guard; switches after two failures |
+| `throw_escapes.json` | opponent character + throw | Successes of each break input (T / 6T / 4T / 2T); guessed from the CommandCode first, switched after two failures |
 | `oh.json` | opponent character | Offensive holds (moves that grab a hold) |
 | `nohold.json` | opponent character | Moves a hold "caught" for 0 damage; guarded instead |
 | `stun_holds.json` | our hit-reaction animation id | Holds tried in that stun; retired at 0/3 or when it turns out to be a knockdown |

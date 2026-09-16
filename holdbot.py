@@ -72,6 +72,12 @@ LOW_THROW_CMDS = ()              # the direction guess (373 = 1T) was WRONG: 814
                                  # 8148=1349. Only HighMidLowGround 3 means low
 THROWS_FILE = "throws.json"      # {char: {move: {"cmd": {code: n}, "hml": {v: n}}}}
 ANSWERS_FILE = "throw_answers.json"  # {char: {move: {"duck": [ok, n], "back": [..], "side": [..]}}}
+ESCAPES_FILE = "throw_escapes.json"  # {char: {throw start move: {"T": [ok, n], "6T": [..], "4T": [..], "2T": [..]}}}
+# a throw is broken by matching its command: plain T for a neutral throw
+# (cmd 363, 4/4 with T), direction + T for a command throw. First guess by
+# the CommandCode seen at the start, then learn per throw like the answers.
+ESCAPE_GUESS = {363: "T", 364: "6T", 365: "4T", 366: "2T", 367: "2T"}
+ESCAPE_OPTIONS = ("T", "6T", "4T", "2T")
 NOHOLD_FILE = "nohold.json"      # {char: [move ids]} - strikes our hold "caught" for 0 dmg
 STUN_FILE = "stun_holds.json"    # {our reaction id: [landed, tried]} - holds attempted
                                  # while that stun animation was playing
@@ -1390,7 +1396,65 @@ def main():
 
     throw_cmd = {}          # foe throw startup move -> (cmd, hml) this session
     last_throw_start = [None, None, None]   # (move, cmd, hml) of the last kind-16 seen
-    escape = {"mv": None, "t": 0.0, "hp": 0, "tries": 0, "ok": 0, "by": {}}
+    escape = {"mv": None, "t": 0.0, "hp": 0, "tries": 0, "ok": 0, "by": {},
+              "seq": None}      # {"st": start move, "opt": "6T", "hp0": hp, "t": t}
+    try:
+        with open(ESCAPES_FILE, encoding="utf-8") as fh:
+            throw_esc = json.load(fh)
+    except (OSError, ValueError):
+        throw_esc = {}
+
+    def pick_escape(ch, st_mv, cmd):
+        """Same scoring as the throw answers: keep the guess for the
+        CommandCode until it has failed twice, then the best (ok+1)/(n+2)."""
+        st = throw_esc.setdefault(str(ch), {}).setdefault(str(st_mv), {})
+        default = ESCAPE_GUESS.get(cmd, "T")
+        d = st.get(default, [0, 0])
+        if d[1] < 2 or (d[0] + 1) / (d[1] + 2) >= 0.5:
+            return default
+        best, best_s = default, (d[0] + 1) / (d[1] + 2)
+        for opt in ESCAPE_OPTIONS:
+            ok, n = st.get(opt, [0, 0])
+            sc = (ok + 1) / (n + 2)
+            if sc > best_s + 1e-9:
+                best, best_s = opt, sc
+        return best
+
+    def press_escape(opt):
+        names = []
+        if opt == "6T":
+            names = dirs_to_names(1 if facing_state[0] else -1, 0)
+        elif opt == "4T":
+            names = dirs_to_names(-1 if facing_state[0] else 1, 0)
+        elif opt == "2T":
+            names = ["down"]
+        if names:
+            inj.down(names); time.sleep(0.008)
+        inj.down(["throw"]); time.sleep(args.press)
+        inj.up(["throw"] + names)
+
+    def finish_escape_seq():
+        seq = escape["seq"]
+        if seq is None:
+            return
+        escape["seq"] = None
+        ok = me.get("CurrentHealth") >= seq["hp0"]
+        st = throw_esc.setdefault(str(fchar), {}).setdefault(str(seq["st"]), {})
+        st.setdefault(seq["opt"], [0, 0])
+        st[seq["opt"]][0] += 1 if ok else 0
+        st[seq["opt"]][1] += 1
+        o, n = st[seq["opt"]]
+        if ok:
+            print(f"        ! throw {seq['st']} broken with {seq['opt']}  ({o}/{n})")
+        else:
+            nxt = pick_escape(fchar, seq["st"], seq["cmd"])
+            print(f"        ! throw {seq['st']}: {seq['opt']} did not break it "
+                  f"({o}/{n})" + (f" - trying {nxt} next" if nxt != seq["opt"] else ""))
+        try:
+            with open(ESCAPES_FILE, "w", encoding="utf-8") as fh:
+                json.dump(throw_esc, fh, indent=1, sort_keys=True)
+        except OSError:
+            pass
     prev_km = [None, None, 0]   # (kind, move, frame) last tick: a NEW throw start
                                 # is a kind/move change OR the frame counter dropping
     throw_epoch = [0]       # +1 every time a throw startup begins
@@ -2194,11 +2258,19 @@ def main():
                             and me.get("CurrentHealth") >= escape["hp"]:
                         escape["ok"] += 1       # the previous part cost nothing
                         escape["by"].setdefault(escape["key"], [0, 0])[0] += 1
-                        print(f"        ! escaped {escape['mv']} (no damage)")
                     if zoning is not None:
                         inj.up(zoning); zoning = None
-                    inj.down(["throw"]); time.sleep(args.press); inj.up(["throw"])
                     st_mv, st_cmd, st_hml = last_throw_start
+                    if escape["seq"] is None or now - escape["seq"]["t"] > 3.0 \
+                            or escape["seq"]["st"] != st_mv:
+                        # first grab of this throw: pick how to break it. A
+                        # later part (8174 -> 8178) keeps the same input
+                        if escape["seq"] is not None:
+                            finish_escape_seq()
+                        opt = pick_escape(fchar, st_mv, st_cmd)
+                        escape["seq"] = {"st": st_mv, "cmd": st_cmd, "opt": opt,
+                                         "hp0": me.get("CurrentHealth"), "t": now}
+                    press_escape(escape["seq"]["opt"])
                     if (not last_answer["done"] and last_answer["mv"] == st_mv
                             and now - last_answer["t"] < 1.5):
                         record_answer(False)
@@ -2207,15 +2279,16 @@ def main():
                     escape["tries"] += 1
                     escape["by"].setdefault(key, [0, 0])[1] += 1
                     print(f"  !    grabbed: {mv} (from {st_mv}, cmd {st_cmd}, "
-                          f"h/m/l {st_hml}, {throw_class(st_cmd, st_hml)}) -> T to escape")
+                          f"h/m/l {st_hml}, {throw_class(st_cmd, st_hml)}) -> "
+                          f"{escape['seq']['opt']} to break it")
                     facing_dirty[0] = True      # a throw usually swaps the sides
             elif escape["mv"] is not None and my_type_now != MT_THROWN \
                     and kind != 4 and now - escape["t"] > 0.15:
                 if me.get("CurrentHealth") >= escape["hp"]:
                     escape["ok"] += 1
                     escape["by"].setdefault(escape["key"], [0, 0])[0] += 1
-                    print(f"        ! escaped {escape['mv']} (no damage)")
                 escape["mv"] = None
+                finish_escape_seq()
             if my_type_now == 17:
                 if not was_intro[0] and not args.dry_run and pos_ok[0] \
                         and pos_ok[2] is False:
@@ -2979,10 +3052,15 @@ def main():
                 for ln, (c, dmg) in sorted(combo_stats["by_len"].items()):
                     print(f"    {ln} extra input(s): {c}x, {dmg / max(c, 1):.0f} dmg avg")
             if escape["tries"]:
-                print(f"  throw escapes: T pressed on {escape['tries']} grabs, "
-                      f"{escape['ok']} cost no damage")
+                print(f"  throw escapes: break input pressed on {escape['tries']} grabs, "
+                      f"{escape['ok']} parts cost no damage")
                 for k, (ok, n) in sorted(escape["by"].items()):
                     print(f"    {k:<32} {ok}/{n}")
+            esc = throw_esc.get(str(fchar), {})
+            if esc:
+                print(f"  throw breaks learned for char {fchar} (input: broken/tried):")
+                for st_mv, opts in sorted(esc.items()):
+                    print(f"    {st_mv:<8} " + "  ".join(f"{o} {v[0]}/{v[1]}" for o, v in opts.items()))
             if oh_stats[0] or oh_stats[1]:
                 print(f"  offensive holds: {oh_stats[1]} learned this session, "
                       f"{oh_stats[0]} sidestepped; known for char {fchar}: "
