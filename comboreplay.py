@@ -50,17 +50,46 @@ NUMPAD = {1: (-1, -1), 2: (0, -1), 3: (1, -1), 4: (-1, 0), 5: (0, 0),
 IDLE_MOVES = (0, 1, 2, 3, 4)
 
 
+CMD_TABLE = {}      # cmd -> (token, button held)  from commands.json (--calibrate)
+
+
+def load_commands(path="commands.json"):
+    """The calibration table is the truth: P+K is 1210 neutral / 5770 with
+    6 / 1230 with 4, 4K is 1540, 1P is 1014 - no formula gives those. A cmd
+    exactly 10 above a known one is that input with the BUTTON HELD (the
+    stage that asked for "hold P+K" read 5780 where 6P+K reads 5770)."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            table = json.load(fh)
+    except (OSError, ValueError):
+        return
+    for tok, v in table.items():
+        c = v.get("cmd")
+        if not c:
+            continue
+        cur = CMD_TABLE.get(c)
+        rank = (tok.endswith("h") or "h" in tok[:-2], len(tok))
+        if cur is None or rank < (cur[0].endswith("h") or "h" in cur[0][:-2], len(cur[0])):
+            CMD_TABLE[c] = (tok.replace("h", ""), False)
+    for c, (tok, _) in list(CMD_TABLE.items()):
+        CMD_TABLE.setdefault(c + 10, (tok, True))
+
+
 def decode(cmd):
-    """CommandCode -> (numpad digit or 0, button token) or None."""
+    """CommandCode -> (numpad digit or 0, button token, button held) or None."""
+    if cmd in CMD_TABLE:
+        tok, held = CMD_TABLE[cmd]
+        digit = int(tok[0]) if tok[0].isdigit() else 0
+        return digit, tok[1:] if digit else tok, held
     if cmd == 363:
-        return 0, "T"
+        return 0, "T", False
     if 364 <= cmd <= 369:
-        return {364: 6, 365: 4, 366: 2, 367: 1, 368: 8, 369: 3}[cmd], "T"
+        return {364: 6, 365: 4, 366: 2, 367: 1, 368: 8, 369: 3}[cmd], "T", False
     if cmd == 168:
-        return 0, "H"
+        return 0, "H", False
     for base, btn in BUTTON_BASE.items():
         if base <= cmd < base + 100 and (cmd - base) % 10 == 0:
-            return (cmd - base) // 10, btn
+            return (cmd - base) // 10, btn, False
     return None
 
 
@@ -68,8 +97,8 @@ def token(cmd):
     d = decode(cmd)
     if d is None:
         return f"cmd{cmd}"
-    digit, btn = d
-    return f"{digit if digit else ''}{btn}"
+    digit, btn, held = d
+    return f"{digit if digit else ''}{btn}{'(hold)' if held else ''}"
 
 
 class Hotkeys:
@@ -181,7 +210,9 @@ def press(inj, tok_cmd, facing_right, hold=0.045):
     d = decode(tok_cmd)
     if d is None:
         return False
-    digit, btn = d
+    digit, btn, held = d
+    if held:
+        hold = 0.7                  # a charged version: keep the button down
     dx, dy = NUMPAD.get(digit, (0, 0)) if digit else (0, 0)
     if not facing_right:
         dx = -dx
@@ -311,6 +342,9 @@ def main():
                     help="press this many frames earlier than the demo did (input lag)")
     args = ap.parse_args()
 
+    load_commands()
+    if CMD_TABLE:
+        print(f"commands.json: {len(CMD_TABLE)} command codes known")
     layout = load_layout()
     pid = find_pid(args.process or layout["process"])
     if pid is None:
