@@ -349,20 +349,37 @@ def calibrate(sides, inj, facing_right, hot):
 
 def probe(sides, inj, facing_right, hot, want_cmd, btn="PK"):
     """Try a list of input recipes for one button until the game answers
-    with the wanted CommandCode. For the stage whose demo reads cmd 5780
-    (6P+K reads 5770): the screen says 'hold left/right + P+K'."""
+    with the wanted CommandCode. Memory is sampled WHILE the recipe runs
+    (a move that starts and ends during a 1.5 s button hold was invisible
+    to a sampler that only started afterwards)."""
     me = sides["P1"]
     key = BUTTON_KEY[btn]
     f, b = dirs_to_names(1 if facing_right else -1, 0), dirs_to_names(-1 if facing_right else 1, 0)
+    log = {"cmds": [], "ids": []}
+
+    def sample():
+        me.refresh()
+        c, m = me.get("CommandCode"), me.get("CurrentMove")
+        if c and (not log["cmds"] or log["cmds"][-1] != c):
+            log["cmds"].append(int(c))
+        if m not in IDLE_MOVES and (not log["ids"] or log["ids"][-1] != m):
+            log["ids"].append(int(m))
+
+    def wait(sec):
+        t0 = time.perf_counter()
+        while time.perf_counter() - t0 < sec:
+            sample()
+            time.sleep(0.002)
+
     recipes = [
-        ("6 held 1.2s then " + btn,      lambda: (inj.down(f), time.sleep(1.2), inj.down([key]), time.sleep(0.05), inj.up([key] + f))),
-        ("4 held 1.2s then " + btn,      lambda: (inj.down(b), time.sleep(1.2), inj.down([key]), time.sleep(0.05), inj.up([key] + b))),
-        ("66 (dash) then " + btn,        lambda: (inj.down(f), time.sleep(0.03), inj.up(f), time.sleep(0.03), inj.down(f), time.sleep(0.05), inj.down([key]), time.sleep(0.05), inj.up([key] + f))),
-        ("44 (backdash) then " + btn,    lambda: (inj.down(b), time.sleep(0.03), inj.up(b), time.sleep(0.03), inj.down(b), time.sleep(0.05), inj.down([key]), time.sleep(0.05), inj.up([key] + b))),
-        ("6 + " + btn + " both held 1.5s", lambda: (inj.down(f), time.sleep(0.017), inj.down([key]), time.sleep(1.5), inj.up([key] + f))),
-        ("4 + " + btn + " both held 1.5s", lambda: (inj.down(b), time.sleep(0.017), inj.down([key]), time.sleep(1.5), inj.up([key] + b))),
-        ("left+right together + " + btn, lambda: (inj.down(f + b), time.sleep(0.017), inj.down([key]), time.sleep(0.05), inj.up([key] + f + b))),
-        ("6 then release, " + btn + " within 2 frames", lambda: (inj.down(f), time.sleep(0.3), inj.up(f), time.sleep(0.02), inj.down([key]), time.sleep(0.05), inj.up([key]))),
+        ("6 held 1.2s, then " + btn,           lambda: (inj.down(f), wait(1.2), inj.down([key]), wait(0.05), inj.up([key] + f))),
+        ("4 held 1.2s, then " + btn,           lambda: (inj.down(b), wait(1.2), inj.down([key]), wait(0.05), inj.up([key] + b))),
+        ("66 dash, then " + btn,               lambda: (inj.down(f), wait(0.03), inj.up(f), wait(0.03), inj.down(f), wait(0.05), inj.down([key]), wait(0.05), inj.up([key] + f))),
+        ("6 + " + btn + " held 2.5s",          lambda: (inj.down(f), wait(0.017), inj.down([key]), wait(2.5), inj.up([key] + f))),
+        (btn + " alone held 2.5s",             lambda: (inj.down([key]), wait(2.5), inj.up([key]))),
+        ("4 + " + btn + " held 2.5s",          lambda: (inj.down(b), wait(0.017), inj.down([key]), wait(2.5), inj.up([key] + b))),
+        ("6 held, " + btn + " tapped twice",   lambda: (inj.down(f), wait(0.1), inj.down([key]), wait(0.05), inj.up([key]), wait(0.15), inj.down([key]), wait(0.05), inj.up([key] + f))),
+        ("left+right together + " + btn,       lambda: (inj.down(f + b), wait(0.017), inj.down([key]), wait(0.05), inj.up([key] + f + b))),
     ]
     print(f"probing for cmd {want_cmd} with {btn}. F10 aborts.")
     for name, do in recipes:
@@ -375,23 +392,13 @@ def probe(sides, inj, facing_right, hot, want_cmd, btn="PK"):
                 break
             time.sleep(0.005)
         time.sleep(0.3)
+        log["cmds"], log["ids"] = [], []
         do()
         inj.release_all()
-        got_cmd, ids = None, []
-        t1 = time.perf_counter()
-        while time.perf_counter() - t1 < 1.8:
-            me.refresh()
-            c, m = me.get("CommandCode"), me.get("CurrentMove")
-            if m not in IDLE_MOVES:
-                if not ids:
-                    got_cmd = int(c) if c else None
-                if not ids or ids[-1] != m:
-                    ids.append(int(m))
-            elif ids and time.perf_counter() - t1 > 0.3:
-                break
-            time.sleep(0.002)
-        mark = "  <== MATCH" if got_cmd == want_cmd else ""
-        print(f"  {name:<36} -> cmd {got_cmd}  move {'>'.join(map(str, ids)) if ids else None}{mark}")
+        wait(1.5)                       # whatever comes out on release
+        mark = "  <== MATCH" if want_cmd in log["cmds"] else ""
+        print(f"  {name:<32} -> cmds {'>'.join(map(str, log['cmds'])) or None}  "
+              f"moves {'>'.join(map(str, log['ids'])) or None}{mark}")
         time.sleep(0.5)
 
 
