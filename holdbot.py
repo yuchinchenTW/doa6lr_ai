@@ -1462,7 +1462,11 @@ def main():
         danger_cache.update(char=fchar, t=now, reach=best, mv=best_mv, su=best_su)
         return best
 
-    def pick_answer(ch, tmv, default, options=("duck", "back", "side", "lowkick")):
+    def pick_answer(ch, tmv, default, options=("duck", "back", "side", "lowkick", "hopkick")):
+        # "hopkick": 8K. Up + K together - a jumping/hop kick where the
+        # character has one is airborne and cannot be thrown; where it does
+        # not, up alone is a sidestep and the K a sidestep attack. Scored
+        # like the rest, so a useless one is dropped after two tries.
         # "lowkick": 2K. A low attack puts us in crouching status from its
         # first frame, and a standing throw grabs nothing crouching - the
         # crouch walk needs 4+ frames to get there and lost to the 7-frame
@@ -2791,11 +2795,11 @@ def main():
                         answer = pick_answer(fchar, mv, "duck")
                     else:
                         answer = pick_answer(fchar, mv, "back")
-                if answer in ("back", "side", "duck", "lowkick"):
+                if answer in ("back", "side", "duck", "lowkick", "hopkick"):
                     if not last_answer["done"]:
                         record_answer(True)     # the previous one was not punished
                     last_answer.update(mv=mv, ans=answer, t=time.perf_counter(), done=False)
-                if answer in ("back", "side", "duck", "wait", "lowkick"):
+                if answer in ("back", "side", "duck", "wait", "lowkick", "hopkick"):
                     if answer in ("duck", "wait"):
                         key = (back_names() + ["down"]) if answer == "duck" else []
                         # interruptible: the CPU chains throws (8148 whiff ->
@@ -2875,11 +2879,11 @@ def main():
                                 fire("punish", "~ duck punish", me.get("CurrentMove"),
                                      None, pre)
                                 note += f"  (whiffed) -> {btn} @{d2:.0f}"
-                    elif answer == "lowkick":
+                    elif answer in ("lowkick", "hopkick"):
                         note = ""
                         if zoning is not None:
                             inj.up(zoning); zoning = None
-                        combo_press(parse_combo("2K")[0])   # down + K together
+                        combo_press(parse_combo("2K" if answer == "lowkick" else "8K")[0])
                     else:
                         note = ""
                         (backdash if answer == "back" else sidestep)()
