@@ -83,30 +83,48 @@ class Hotkeys:
         return hits
 
 
-def record(me, foe, hot):
+def record(sides, hot, rebind):
     """Wait for the demonstration to start, log every command / move change
-    until both characters have been idle for 1.2 s. Returns the event list."""
+    until both characters have been idle for 1.2 s. Returns the event list.
+
+    The demo may run on either object (or on freshly created ones - the
+    anchors are re-resolved every half second while waiting), so both sides
+    are watched and the one that attacks first is the performer."""
     print("waiting for the demonstration (start it in the game)...")
     events = []
     started = None
     last_cmd = last_mv = None
     idle_since = None
+    me = foe = None
+    seen = {}
+    t_bind = 0.0
     while True:
         for k in hot.pressed():
             if k == "F10":
-                return None
-        me.refresh(); foe.refresh()
-        cmd, mv, fr = me.get("CommandCode"), me.get("CurrentMove"), me.get("CurrentMoveFrame")
+                return None, None
         now = time.perf_counter()
         if started is None:
-            if mv not in IDLE_MOVES and me.get("MoveKind") in (3, 16, 5):
-                started = now
-                last_cmd, last_mv = cmd, None
-                print("  demo started")
-            else:
-                last_cmd = cmd
+            if now - t_bind > 0.5:
+                sides = rebind() or sides
+                t_bind = now
+            for name, sd in sides.items():
+                sd.refresh()
+                st = (sd.get("CurrentMove"), sd.get("MoveKind"), sd.get("CommandCode"))
+                if seen.get(name) != st:
+                    seen[name] = st
+                    print(f"    [{name}] move {st[0]} kind {st[1]} cmd {st[2]}")
+                if st[0] not in IDLE_MOVES and st[1] in (3, 16, 5):
+                    me = sd
+                    foe = [o for n, o in sides.items() if n != name][0]
+                    started = now
+                    last_cmd, last_mv = st[2], None
+                    print(f"  demo started on {name}")
+                    break
+            if started is None:
                 time.sleep(0.002)
                 continue
+        me.refresh(); foe.refresh()
+        cmd, mv, fr = me.get("CommandCode"), me.get("CurrentMove"), me.get("CurrentMoveFrame")
         if cmd != last_cmd and cmd:
             events.append({"t": round(now - started, 3), "cmd": int(cmd), "tok": token(cmd),
                            "prev_mv": int(last_mv) if last_mv is not None else int(mv),
@@ -115,6 +133,7 @@ def record(me, foe, hot):
                   f"during move {last_mv if last_mv is not None else mv} frame {fr}")
         if mv != last_mv:
             events.append({"t": round(now - started, 3), "mv": int(mv), "kind": int(me.get("MoveKind"))})
+            print(f"  {now - started:6.3f}s  move {mv} (kind {me.get('MoveKind')})")
             last_mv = mv
         last_cmd = cmd
         both_idle = (mv in IDLE_MOVES and me.get("MoveKind") == 0
@@ -126,7 +145,7 @@ def record(me, foe, hot):
         else:
             idle_since = None
         time.sleep(0.001)
-    return events
+    return events, me
 
 
 def plan(events):
@@ -222,15 +241,20 @@ def main():
     anchors = locate_all(proc, layout)
     if any(v is None for v in anchors.values()):
         print(f"anchors did not resolve: {anchors}"); sys.exit(2)
-    foe_side = "P2" if args.me == "P1" else "P1"
-    me, foe = Side(proc, layout, anchors, args.me), Side(proc, layout, anchors, foe_side)
+    def rebind():
+        a = locate_all(proc, layout)
+        if any(v is None for v in a.values()):
+            return None
+        return {"P1": Side(proc, layout, a, "P1"), "P2": Side(proc, layout, a, "P2")}
+
+    sides = rebind()
     inj = KeyboardInjector()
     hot = Hotkeys()
     facing_right = args.facing == "right"
 
     steps = None
     while True:
-        events = record(me, foe, hot)
+        events, me = record(sides, hot, rebind)
         if events is None:
             break
         steps = plan(events)
