@@ -278,6 +278,7 @@ def calibrate(sides, inj, facing_right, hot):
     order = [(0, b) for b in ("P", "K", "PK", "HK", "S", "T")]
     for d in (6, 4, 2, 8, 3, 9, 1, 7):
         order += [(d, b) for b in ("P", "K", "PK", "HK", "S")]
+    order += [(d, "T") for d in (6, 4, 2)]     # the throw-break inputs holdbot uses
     # "hold the direction" commands (the screen said hold left/right + P+K
     # for the move the demo read as cmd 5780): direction held 0.35 s first
     for d in (6, 4):
