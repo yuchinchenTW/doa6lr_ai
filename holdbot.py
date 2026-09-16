@@ -2796,6 +2796,9 @@ def main():
                     else:
                         answer = pick_answer(fchar, mv, "back")
                 if answer in ("back", "side", "duck", "lowkick", "hopkick"):
+                    if not close_throw["done"]:
+                        close_throw["done"] = True  # our T was cut short by this
+                                                    # answer: neither a hit nor a miss
                     if not last_answer["done"]:
                         record_answer(True)     # the previous one was not punished
                     last_answer.update(mv=mv, ans=answer, t=time.perf_counter(), done=False)
