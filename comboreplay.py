@@ -85,6 +85,16 @@ def load_commands(path="commands.json"):
     # Fatal Rush, 5780 is the 46P+K motion)
 
 
+def distance(me, foe):
+    try:
+        mx, _, mz = me.xyz()
+        fx, _, fz = foe.xyz()
+        d = ((mx - fx) ** 2 + (mz - fz) ** 2) ** 0.5
+        return d if 0 < d < 2000 else None
+    except Exception:
+        return None
+
+
 def split_token(tok):
     """'46PK' -> ([4, 6], 'PK'); 'P' -> ([], 'P'). Several digits are a
     motion: every direction but the last is tapped, the last one goes down
@@ -201,8 +211,10 @@ def record(sides, hot, rebind):
                         # the first command is already in place when we
                         # notice the demo: record it (a one-move stage has
                         # nothing else, and the first recording had 0 inputs)
+                        d0 = distance(me, foe)
                         events.append({"t": 0.0, "cmd": int(st[2]), "tok": token(st[2]),
-                                       "prev_mv": 0, "prev_fr": 0})
+                                       "prev_mv": 0, "prev_fr": 0,
+                                       "dist": None if d0 is None else round(d0)})
                         print(f"   0.000s  input {token(st[2]):<6} (cmd {st[2]})  first")
                     break
             if started is None:
@@ -211,11 +223,13 @@ def record(sides, hot, rebind):
         me.refresh(); foe.refresh()
         cmd, mv, fr = me.get("CommandCode"), me.get("CurrentMove"), me.get("CurrentMoveFrame")
         if cmd != last_cmd and cmd:
+            d_in = distance(me, foe)
             events.append({"t": round(now - started, 3), "cmd": int(cmd), "tok": token(cmd),
                            "prev_mv": int(last_mv) if last_mv is not None else int(mv),
-                           "prev_fr": int(fr)})
+                           "prev_fr": int(fr), "dist": None if d_in is None else round(d_in)})
             print(f"  {now - started:6.3f}s  input {token(cmd):<6} (cmd {cmd})  "
-                  f"during move {last_mv if last_mv is not None else mv} frame {fr}")
+                  f"during move {last_mv if last_mv is not None else mv} frame {fr}"
+                  + (f"  dist {d_in:.0f}" if d_in is not None else ""))
         if mv != last_mv:
             events.append({"t": round(now - started, 3), "mv": int(mv), "kind": int(me.get("MoveKind"))})
             print(f"  {now - started:6.3f}s  move {mv} (kind {me.get('MoveKind')})")
@@ -248,7 +262,7 @@ def plan(events):
             if "cmd" in f:
                 break
         steps.append({"tok": e["tok"], "cmd": e["cmd"], "prev_mv": e["prev_mv"],
-                      "prev_fr": e["prev_fr"], "mv": produced})
+                      "prev_fr": e["prev_fr"], "mv": produced, "dist": e.get("dist")})
     return steps
 
 
@@ -294,7 +308,36 @@ def press(inj, tok_cmd, facing_right, hold=0.045, tok=None):
 MOVE_CMDS = {9: "66", 4: "44"}      # dashes seen in a demo (moves 3 / 5)
 
 
-def replay(me, steps, inj, facing_right, lag_frames=2, tries=None):
+def close_in(me, foe, inj, facing_right, want, timeout=2.5):
+    """Walk forward until we are as close as the demo was (+10) for this
+    input. The dummy is a post that never moves; the demo dashed in before
+    the close-range tasks and our replay stood where it was, so half the
+    moves whiffed. The walk id tells us if 'forward' is mirrored."""
+    d = distance(me, foe)
+    if d is None or want is None or d <= want + 10:
+        return d
+    fwd = dirs_to_names(1 if facing_right else -1, 0)
+    inj.down(fwd)
+    t0 = time.perf_counter()
+    flipped = False
+    while time.perf_counter() - t0 < timeout:
+        me.refresh()
+        mv = me.get("CurrentMove")
+        if not flipped and mv in (2, 4) and time.perf_counter() - t0 > 0.06:
+            inj.up(fwd)                          # walking away: mirrored
+            fwd = dirs_to_names(-1 if facing_right else 1, 0)
+            inj.down(fwd)
+            flipped = True
+        d = distance(me, foe)
+        if d is not None and d <= want + 10:
+            break
+        time.sleep(0.005)
+    inj.up(fwd)
+    time.sleep(0.1)                              # neutral, or the button reads 6P
+    return d
+
+
+def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
     """Play the steps back. A step the demo made from idle (prev move 0)
     waits for OUR idle; a string follow-up waits for the previous produced
     move and its frame. Unknown codes go through the family candidates,
@@ -306,6 +349,11 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None):
     results, learned = [], {}
     for i, s in enumerate(steps):
         from_idle = s["prev_mv"] in IDLE_MOVES
+        if s["cmd"] in MOVE_CMDS or s["cmd"] == 135:
+            # the demo's own steps toward the post: replaced by close_in()
+            results.append((s["tok"], s["mv"], []))
+            print(f"  {i + 1:>2}. {s['tok']:<10} (the demo walking in - handled by closing in)")
+            continue
         if i > 0:
             t0 = time.perf_counter()
             if from_idle:
@@ -325,6 +373,9 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None):
                     if mv in IDLE_MOVES and time.perf_counter() - t0 > 0.25:
                         break               # the string dropped: press anyway
                     time.sleep(0.001)
+        d_now = None
+        if from_idle and foe is not None:
+            d_now = close_in(me, foe, inj, facing_right, s.get("dist"))
         cmd = s["cmd"]
         used = None
         if decode(cmd) is not None:
@@ -351,8 +402,14 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None):
         t1 = time.perf_counter()
         limit = 0.35 if i + 1 < len(steps) else 1.2
         again, t_last = 0, time.perf_counter()
+        landed = False
         while time.perf_counter() - t1 < limit:
             me.refresh()
+            if foe is not None:
+                foe.refresh()
+                fm = foe.get("CurrentMove")
+                if foe.get("MoveType") == 3 or 24000 <= fm < 27000 or 16000 <= fm < 16100:
+                    landed = True                # hit (or blocked) reaction on the post
             mv = me.get("CurrentMove")
             if mv not in IDLE_MOVES and mv != prev:
                 if not ids or ids[-1] != mv:
@@ -381,6 +438,8 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None):
               f"{'>'.join(map(str, ids)) if ids else None}"
               + (f"  tried {used}" if decode(cmd) is None and used else "")
               + (f"  (+{again} re-press)" if again else "")
+              + (f"  dist {d_now:.0f}/{s['dist']}" if d_now is not None and s.get("dist") else "")
+              + ("  HIT" if landed else "")
               + ("" if ok else "  (unknown code, nothing pressed)")
               + ("  OK" if hit else ""))
     hits = sum(1 for _, w, g in results if w is not None and w in g)
@@ -563,11 +622,21 @@ def main():
     anchors = locate_all(proc, layout)
     if any(v is None for v in anchors.values()):
         print(f"anchors did not resolve: {anchors}"); sys.exit(2)
+    try:
+        with open("pos.json", encoding="utf-8") as fh:
+            pos_off = json.load(fh)            # {"me": off, "foe": off} inside the object
+    except (OSError, ValueError):
+        pos_off = {}
+
     def rebind():
         a = locate_all(proc, layout)
         if any(v is None for v in a.values()):
             return None
-        return {"P1": Side(proc, layout, a, "P1"), "P2": Side(proc, layout, a, "P2")}
+        sides = {"P1": Side(proc, layout, a, "P1"), "P2": Side(proc, layout, a, "P2")}
+        if pos_off:
+            sides["P1"].pos = sides["P1"].base + int(pos_off.get("me", 0xC0))
+            sides["P2"].pos = sides["P2"].base + int(pos_off.get("foe", 0xC0))
+        return sides
 
     sides = rebind()
     inj = KeyboardInjector()
@@ -587,6 +656,8 @@ def main():
         events, me = record(sides, hot, rebind)
         if events is None:
             break
+        sides = rebind() or sides
+        me = sides["P1"] if me is None or me.base == sides["P1"].base else sides["P2"]
         steps = plan(events)
         tries = {}
         print("\nrecorded: " + "  ".join(f"{s['tok']}->{s['mv']}@{s['prev_fr']}" for s in steps))
@@ -602,7 +673,8 @@ def main():
                     json.dump({"events": events, "steps": steps}, fh, indent=1)
                 print("  saved demo.json")
             if "F8" in keys:
-                replay(me, steps, inj, facing_right, args.lag_frames, tries)
+                replay(me, steps, inj, facing_right, args.lag_frames, tries,
+                       foe=[o for o in sides.values() if o is not me][0])
                 print("F8 replay   F5 record again   F7 save   F10 quit")
             time.sleep(0.01)
 
