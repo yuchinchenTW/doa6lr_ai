@@ -28,6 +28,7 @@ list on screen and report what the raw ones were.
 import argparse
 import ctypes
 import json
+import re
 import sys
 import time
 
@@ -75,21 +76,30 @@ def load_commands(path="commands.json"):
         CMD_TABLE.setdefault(c + 10, (tok, True))
 
 
+def split_token(tok):
+    """'46PK' -> ([4, 6], 'PK'); 'P' -> ([], 'P'). Several digits are a
+    motion: every direction but the last is tapped, the last one goes down
+    with the button (the stage screen showed <- -> P+K, i.e. 46P+K)."""
+    m = re.match(r"(\d*)([A-Z]+)", tok)
+    return [int(ch) for ch in m.group(1)], m.group(2)
+
+
 def decode(cmd):
-    """CommandCode -> (numpad digit or 0, button token, button held) or None."""
+    """CommandCode -> (direction digits, button token, button held) or None."""
     if cmd in CMD_TABLE:
         tok, held = CMD_TABLE[cmd]
-        digit = int(tok[0]) if tok[0].isdigit() else 0
-        return digit, tok[1:] if digit else tok, held
+        digits, btn = split_token(tok)
+        return digits, btn, held
     if cmd == 363:
-        return 0, "T", False
+        return [], "T", False
     if 364 <= cmd <= 369:
-        return {364: 6, 365: 4, 366: 2, 367: 1, 368: 8, 369: 3}[cmd], "T", False
+        return [{364: 6, 365: 4, 366: 2, 367: 1, 368: 8, 369: 3}[cmd]], "T", False
     if cmd == 168:
-        return 0, "H", False
+        return [], "H", False
     for base, btn in BUTTON_BASE.items():
         if base <= cmd < base + 100 and (cmd - base) % 10 == 0:
-            return (cmd - base) // 10, btn, False
+            d = (cmd - base) // 10
+            return ([d] if d else []), btn, False
     return None
 
 
@@ -97,8 +107,8 @@ def token(cmd):
     d = decode(cmd)
     if d is None:
         return f"cmd{cmd}"
-    digit, btn, held = d
-    return f"{digit if digit else ''}{btn}{'(hold)' if held else ''}"
+    digits, btn, held = d
+    return f"{''.join(map(str, digits))}{btn}{'(hold)' if held else ''}"
 
 
 class Hotkeys:
@@ -210,9 +220,17 @@ def press(inj, tok_cmd, facing_right, hold=0.045):
     d = decode(tok_cmd)
     if d is None:
         return False
-    digit, btn, held = d
+    digits, btn, held = d
     if held:
         hold = 0.7                  # a charged version: keep the button down
+    # a motion (46P+K): tap every direction but the last, 2 frames each
+    for dg in digits[:-1]:
+        ddx, ddy = NUMPAD.get(dg, (0, 0))
+        if not facing_right:
+            ddx = -ddx
+        names = dirs_to_names(ddx, ddy)
+        inj.down(names); time.sleep(0.033); inj.up(names); time.sleep(0.017)
+    digit = digits[-1] if digits else 0
     dx, dy = NUMPAD.get(digit, (0, 0)) if digit else (0, 0)
     if not facing_right:
         dx = -dx
@@ -288,6 +306,7 @@ def calibrate(sides, inj, facing_right, hot):
     for d in (6, 4, 2, 8, 3, 9, 1, 7):
         order += [(d, b) for b in ("P", "K", "PK", "HK", "S")]
     order += [(d, "T") for d in (6, 4, 2)]     # the throw-break inputs holdbot uses
+    order += [("46", b) for b in ("PK", "P", "K")] + [("64", "PK"), ("236", "P"), ("214", "P")]
     order += [("6hb", "PK"), ("4hb", "P"), ("6hb", "K")]   # BUTTON held 1 s
     # "hold the direction" commands (the screen said hold left/right + P+K
     # for the move the demo read as cmd 5780): direction held 0.35 s first
@@ -311,7 +330,15 @@ def calibrate(sides, inj, facing_right, hot):
         cmd0 = me.get("CommandCode")
         held = isinstance(digit, str) and digit.endswith("h")
         held_btn = isinstance(digit, str) and digit.endswith("hb")
-        dnum = int(str(digit).rstrip("hb")) if digit else 0
+        dstr = str(digit).rstrip("hb") if digit else ""
+        motion = [int(ch) for ch in dstr[:-1]] if len(dstr) > 1 else []
+        dnum = int(dstr[-1]) if dstr else 0
+        for dg in motion:                     # 46P+K: tap 4, then 6 + button
+            mdx, mdy = NUMPAD[dg]
+            if not facing_right:
+                mdx = -mdx
+            nm = dirs_to_names(mdx, mdy)
+            inj.down(nm); time.sleep(0.033); inj.up(nm); time.sleep(0.017)
         dx, dy = NUMPAD.get(dnum, (0, 0)) if dnum else (0, 0)
         if not facing_right:
             dx = -dx
@@ -372,6 +399,11 @@ def probe(sides, inj, facing_right, hot, want_cmd, btn="PK"):
             time.sleep(0.002)
 
     recipes = [
+        ("4 tap, 6 + " + btn + " together",     lambda: (inj.down(b), wait(0.033), inj.up(b), wait(0.017), inj.down(f + [key]), wait(0.05), inj.up([key] + f))),
+        ("4 tap, 6, " + btn + " a frame later", lambda: (inj.down(b), wait(0.033), inj.up(b), wait(0.017), inj.down(f), wait(0.017), inj.down([key]), wait(0.05), inj.up([key] + f))),
+        ("4 held 0.2s, 6 + " + btn,             lambda: (inj.down(b), wait(0.2), inj.up(b), wait(0.017), inj.down(f + [key]), wait(0.05), inj.up([key] + f))),
+        ("4, neutral 3f, 6 + " + btn,           lambda: (inj.down(b), wait(0.033), inj.up(b), wait(0.05), inj.down(f + [key]), wait(0.05), inj.up([key] + f))),
+        ("6 tap, 4 + " + btn,                   lambda: (inj.down(f), wait(0.033), inj.up(f), wait(0.017), inj.down(b + [key]), wait(0.05), inj.up([key] + b))),
         ("6 held 1.2s, then " + btn,           lambda: (inj.down(f), wait(1.2), inj.down([key]), wait(0.05), inj.up([key] + f))),
         ("4 held 1.2s, then " + btn,           lambda: (inj.down(b), wait(1.2), inj.down([key]), wait(0.05), inj.up([key] + b))),
         ("66 dash, then " + btn,               lambda: (inj.down(f), wait(0.03), inj.up(f), wait(0.03), inj.down(f), wait(0.05), inj.down([key]), wait(0.05), inj.up([key] + f))),
