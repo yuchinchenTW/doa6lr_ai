@@ -386,8 +386,10 @@ def main():
                          "by. Strikes beat throws: the 7-frame dash throw "
                          "(8340) cannot be reacted to, only pre-empted")
     ap.add_argument("--close-throw-range", type=float, default=75.0,
-                    help="inside a fast unanswerable throw's reach, grab an idle "
-                         "opponent this close with our own T (0 disables)")
+                    help="grab an idle opponent this close with our own T before "
+                         "it grabs us - 11/12 against char 2's 7-frame dash throw; "
+                         "scored per opponent in close_throw.json and dropped under "
+                         "30%% (0 disables)")
     ap.add_argument("--poke-min", type=float, default=60.0)
     ap.add_argument("--poke-max", type=float, default=190.0)
     ap.add_argument("--combo", default="auto",
@@ -2488,7 +2490,8 @@ def main():
                 d_reach = danger_reach() if not args.dry_run else None
                 in_danger = (d_reach is not None and foe_idle
                              and d_now <= d_reach + 25)
-                if (in_danger and d_now <= args.close_throw_range and my_free
+                if (args.close_throw_range > 0 and foe_idle
+                        and d_now <= args.close_throw_range and my_free
                         and my_mv_now == 0 and precrouch is None and ct_allowed()
                         and close_throw["done"] and now - last_fire > 0.5
                         and mv in (0, 1, 2, 3)):
@@ -2499,8 +2502,8 @@ def main():
                                        myhp0=me.get("CurrentHealth"), done=False)
                     last_fire = now
                     last_action[:] = ["throw", now]
-                    print(f"  T    inside {danger_cache['mv']}'s reach at {d_now:.0f}: "
-                          f"throwing first")
+                    print(f"  T    idle at {d_now:.0f}: throwing first"
+                          + (f"  (inside {danger_cache['mv']}'s reach)" if in_danger else ""))
                     time.sleep(period)
                     continue
                 if precrouch is not None and not (in_danger and now < cornered[0]):
@@ -3244,7 +3247,8 @@ def main():
             if danger_stats[0] or danger_stats[1]:
                 ct = ct_stats.get(str(fchar))
                 if ct:
-                    print(f"  T first inside the danger reach: {ct[0]}/{ct[1]} grabbed them (char {fchar})")
+                    print(f"  T first on an idle opponent inside {args.close_throw_range:.0f}: "
+                          f"{ct[0]}/{ct[1]} grabbed them (char {fchar})")
                 print(f"  fast-throw danger zone: backed off {danger_stats[1]}x, "
                       f"crouched under it {danger_stats[0]}x")
             esc = {k: v for k, v in throw_esc.items() if k.startswith("cmd")}

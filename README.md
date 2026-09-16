@@ -88,6 +88,7 @@ Full list: `python holdbot.py --help`.
 | `throw_answers.json` | opponent character + move | Successes of crouch / back / side / guard; switches after two failures |
 | `throw_escapes.json` | throw CommandCode (pooled across characters) | Successes of each break input (T / 6T / 4T / 2T); guessed from the CommandCode first, switched after two failures |
 | `oh.json` | opponent character | Offensive holds (moves that grab a hold) |
+| `close_throw.json` | opponent character | Our own neutral T on an idle opponent inside 75 units: grabbed / tried; dropped under 30% |
 | `nohold.json` | opponent character | Moves a hold "caught" for 0 damage; guarded instead |
 | `stun_holds.json` | our hit-reaction animation id | Holds tried in that stun; retired at 0/3 or when it turns out to be a knockdown |
 | `combo_stats.json` | own character + opener | Tries and net damage of every string |
