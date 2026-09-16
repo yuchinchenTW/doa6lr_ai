@@ -386,10 +386,11 @@ def main():
                          "by. Strikes beat throws: the 7-frame dash throw "
                          "(8340) cannot be reacted to, only pre-empted")
     ap.add_argument("--close-throw-range", type=float, default=75.0,
-                    help="grab an idle opponent this close with our own T before "
-                         "it grabs us - 11/12 against char 2's 7-frame dash throw; "
-                         "scored per opponent in close_throw.json and dropped under "
-                         "30%% (0 disables)")
+                    help="inside a fast unanswerable throw's reach, grab an idle "
+                         "opponent this close with our own T before it grabs us - "
+                         "29/47 against char 2's 7-frame dash throw, 0/14 against "
+                         "characters without one, so only there; scored per opponent "
+                         "in close_throw.json (0 disables)")
     ap.add_argument("--poke-min", type=float, default=60.0)
     ap.add_argument("--poke-max", type=float, default=190.0)
     ap.add_argument("--combo", default="auto",
@@ -2512,6 +2513,7 @@ def main():
                 ct_mode = ("idle" if my_mv_now == 0 else
                            "walk" if (my_mv_now in BACK_IDS and zoning is not None) else None)
                 if (args.close_throw_range > 0 and foe_idle and ct_mode is not None
+                        and in_danger           # 29/47 vs the grappler, 0/14 vs everyone else
                         and d_now <= args.close_throw_range
                         and (my_free or ct_mode == "walk")     # a back DASH (4) is not "free"
                         and precrouch is None and ct_allowed(ct_mode)
