@@ -1342,6 +1342,9 @@ def main():
     intro_tap = [0.0, 0]    # last guard tap in the intro, printed once
     zoning = None           # the back key we are holding to keep distance
     zone_t0 = [0.0, 0.0]    # when zoning started, distance then (wall check)
+    precrouch = None        # keys held while we sit under a fast throw's reach
+    danger_cache = {"char": None, "t": 0.0, "reach": None, "mv": None, "su": None}
+    danger_stats = [0, 0]   # pre-crouch episodes, danger back-offs
     zone_flip = [0.0, 0]    # last facing flip from the zoning walk, count
     salvage = [0.0, None]   # until when to watch a hold turning into a guard
     break_need = [args.gauge_max // 2]   # gauge estimate a 4S needs; learned
@@ -1389,6 +1392,33 @@ def main():
 
     def answer_stats(ch, tmv):
         return throw_ans.setdefault(str(ch), {}).setdefault(str(tmv), {})
+
+    def danger_reach():
+        """Reach of this opponent's fastest unanswerable throw, or None.
+
+        char 2's 8137: 7 frames, grabs from 146, crouch 1/9, sidestep 0/3,
+        every break input 0/x - nothing reactive beats it with 2 frames of
+        input lag, and it lost two survival rounds in a row. What works is
+        not standing in its reach: back off there instead of poking, and
+        when the wall stops us, sit in a crouch so the standing throw
+        whiffs. A throw counts once its startup is learned at <= 8 frames
+        and its answers have failed 4+ times at under 30%."""
+        now = time.perf_counter()
+        if danger_cache["char"] == fchar and now - danger_cache["t"] < 1.0:
+            return danger_cache["reach"]
+        best, best_mv, best_su = None, None, None
+        for mv_s, ent in throws_seen.get(str(fchar), {}).items():
+            su = startup.get(fchar, int(mv_s))
+            reach = ent.get("reach")
+            if su is None or su > 8 or reach is None:
+                continue
+            st = answer_stats(fchar, int(mv_s))
+            n = sum(v[1] for v in st.values())
+            ok = sum(v[0] for v in st.values())
+            if n >= 4 and ok / n < 0.3 and (best is None or reach > best):
+                best, best_mv, best_su = reach, int(mv_s), su
+        danger_cache.update(char=fchar, t=now, reach=best, mv=best_mv, su=best_su)
+        return best
 
     def pick_answer(ch, tmv, default, options=("duck", "back", "side")):
         """duck beat every runner so far, but char 25's 8036 grabbed a
@@ -2292,6 +2322,11 @@ def main():
                         str(mv), {"cmd": {}, "hml": {}})
                     ent["cmd"][str(cmd_now)] = ent["cmd"].get(str(cmd_now), 0) + 1
                     ent["hml"][str(hml_now)] = ent["hml"].get(str(hml_now), 0) + 1
+                if foe.get("CurrentMoveFrame") <= 3 and str(mv) in throws_seen.get(str(fchar), {}):
+                    d_t, _ = distance()
+                    if 20 < d_t < 400:          # how far out this throw starts from
+                        ent = throws_seen[str(fchar)][str(mv)]
+                        ent["reach"] = max(ent.get("reach", 0), round(d_t))
                 if cmd_now or last_throw_start[0] != mv:
                     last_throw_start[:] = [mv, cmd_now or throw_cmd.get(mv, (0, 0))[0], hml_now]
             # ---- grabbed: tap T at once (and again on every combo-throw
@@ -2410,6 +2445,30 @@ def main():
                 prev_free[0] = my_free
                 foe_idle = (kind == 0 and mv in (0, 1, 2, 3, 10, 31, 33, 39))
                 d_now, _ = distance()
+                d_reach = danger_reach() if not args.dry_run else None
+                in_danger = (d_reach is not None and foe_idle
+                             and d_now <= d_reach + 25)
+                if precrouch is not None and not (in_danger and now < cornered[0]):
+                    inj.up(precrouch); precrouch = None      # room again, or they moved
+                if (in_danger and now < cornered[0] and precrouch is None
+                        and my_mv_now == 0 and me.get("MoveType") == MT_IDLE):
+                    # cornered inside the reach: a poke here is a hi-counter
+                    # throw for them. Sit down - the standing throw whiffs on
+                    # a croucher - until they move or we get room
+                    if zoning is not None:
+                        inj.up(zoning); zoning = None
+                    precrouch = back_names() + ["down"]
+                    inj.down(precrouch[:-1]); time.sleep(0.008); inj.down(precrouch[-1:])
+                    danger_stats[0] += 1
+                    last_action[:] = ["precrouch", now]
+                    if danger_stats[0] <= 3 or danger_stats[0] % 10 == 0:
+                        print(f"  v    danger: {danger_cache['mv']} ({danger_cache['su']} f, "
+                              f"reach {d_reach:.0f}) and no room - crouching under it")
+                    time.sleep(period)
+                    continue
+                if precrouch is not None:
+                    time.sleep(period)
+                    continue
                 after_hold_2t = (combo_seqs.get("ground") and kind == 12 and d_now <= 130
                                  and now - last_hold_caught[0] < 3.0)
                 if ((kind == 12 or (kind == 13 and 60 <= mv <= 110))
@@ -2452,7 +2511,7 @@ def main():
                 # walks there; farther out only when it is closing in.
                 if (args.poke != "none" and not args.dry_run and my_free
                         and now - last_poke[0] > poke_gap_now()
-                        and now - last_fire > 0.3 and foe_idle
+                        and now - last_fire > 0.3 and foe_idle and not in_danger
                         and me.get("CurrentMove") == 0
                         and args.poke_min <= d_now <= min(args.poke_max, args.jab_reach)):
                     if zoning is not None:
@@ -2465,10 +2524,15 @@ def main():
                     continue
                 if args.zone and not args.dry_run and my_free and foe_idle \
                         and now >= cornered[0]:
-                    if zoning is None and d_now < args.zone:
+                    if zoning is None and d_now < max(args.zone, (d_reach or 0) + 25):
                         zoning = back_names()
                         inj.down(zoning)
                         zone_t0[:] = [now, d_now]
+                        if in_danger:
+                            danger_stats[1] += 1
+                            if danger_stats[1] <= 3:
+                                print(f"  <    danger: {danger_cache['mv']} reaches "
+                                      f"{d_reach:.0f} - backing off instead of poking")
                     elif zoning is not None:
                         if now - zone_t0[0] > 0.35 and d_now <= zone_t0[1] + 5:
                             # walking back gained nothing: a wall. Stop
@@ -2559,6 +2623,14 @@ def main():
                      and my_move not in (0, WALK_FWD, WALK_BACK) + GUARD_MOVES)
                     or my_move in CROUCH_MOVES)     # 3rd time: inputs from
                                                     # 125-135 come out as 80-91
+            if precrouch is not None and (incoming_strike or incoming_throw):
+                # sitting under a fast throw's reach: a strike needs us up
+                # (holds are skipped from 10/13); a throw wants exactly this
+                # crouch, so keep it and let the duck answer run
+                if incoming_strike:
+                    inj.up(precrouch); precrouch = None
+                elif my_move in (10, 13):
+                    busy = False
             in_reaction = (my_type == MT_HIT
                            or HIT_REACTION[0] <= my_move < HIT_REACTION[1])
             # DOA6 lets a stunned character hold: that is the whole stun
@@ -3034,6 +3106,8 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        if precrouch is not None:
+            inj.up(precrouch)
         try:
             with open(THROWS_FILE, "w", encoding="utf-8") as fh:
                 json.dump(throws_seen, fh, indent=1, sort_keys=True)
@@ -3102,6 +3176,9 @@ def main():
                       f"{escape['ok']} parts cost no damage")
                 for k, (ok, n) in sorted(escape["by"].items()):
                     print(f"    {k:<32} {ok}/{n}")
+            if danger_stats[0] or danger_stats[1]:
+                print(f"  fast-throw danger zone: backed off {danger_stats[1]}x, "
+                      f"crouched under it {danger_stats[0]}x")
             esc = {k: v for k, v in throw_esc.items() if k.startswith("cmd")}
             if esc:
                 print("  throw breaks learned by CommandCode (input: broken/tried):")
