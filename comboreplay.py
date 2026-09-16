@@ -384,8 +384,11 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                 want_mv = steps[i - 1]["mv"]
                 dt = s.get("dt") or 0.0
                 # only just ahead of the demo's interval: P+K 0.15 s before
-                # the H+K hit came out as a plain P+K (8119), not the stance
-                lead = max(0.0, dt - 0.05 - lag_frames / 60)
+                # the H+K hit came out as a plain P+K (8119), not the stance.
+                # Once a press has worked, use its timing
+                known = tries.get(("t", cmd, s["mv"]))
+                lead = (max(0.0, known - 0.02) if known is not None
+                        else max(0.0, dt - 0.05 - lag_frames / 60))
                 while time.perf_counter() - t0 < max(1.0, dt + 0.3):
                     me.refresh()
                     mv = me.get("CurrentMove")
@@ -434,6 +437,11 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         # ends, not for a fixed 0.35 s
         limit = (0.35 if from_idle else max(0.9, (s.get("dt") or 0) + 0.5)) if i + 1 < len(steps) else 1.2
         again, t_last = 0, time.perf_counter()
+        presses = [time.perf_counter() - t_prev_press]
+        # once a follow-up's timing is known, one press (plus one spare):
+        # re-pressing P in the stance queued a second P, and the K that
+        # followed came out as P,P (8264) instead of the stance kick
+        max_again = 1 if tries.get(("t", cmd, s["mv"])) is not None else 10
         landed = False
         while time.perf_counter() - t1 < limit:
             me.refresh()
@@ -453,8 +461,8 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             elif (not from_idle and mv in IDLE_MOVES and me.get("MoveKind") == 0
                   and time.perf_counter() - t1 > 0.2):
                 break                        # the previous move ended: follow-up missed
-            elif (ok and used and not from_idle and again < 10
-                  and time.perf_counter() - t_last > 0.07):
+            elif (ok and used and not from_idle and again < max_again
+                  and time.perf_counter() - t_last > (0.12 if max_again == 1 else 0.07)):
                 # a string follow-up the game did not take yet: the demo's
                 # "frame 1" is the game's own pre-loaded command, not a
                 # human timing. Press again every ~4 frames (holdbot's
@@ -462,8 +470,11 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                 press(inj, cmd, facing_right, tok=used if decode(cmd) is None else None)
                 again += 1
                 t_last = time.perf_counter()
+                presses.append(t_last - t_prev_press)
             time.sleep(0.001)
         hit = s["mv"] is not None and s["mv"] in ids
+        if hit and not from_idle and ("t", cmd, s["mv"]) not in tries:
+            tries[("t", cmd, s["mv"])] = presses[-1]     # the press that worked
         if hit and decode(cmd) is None and used and used not in MOVE_CMDS.values():
             learned[cmd] = used
         if not hit and s["mv"] is not None and ids:
@@ -608,6 +619,12 @@ def probe(sides, inj, facing_right, hot, want_cmd, btn="PK"):
         (btn + " alone held 2.5s",             lambda: (inj.down([key]), wait(2.5), inj.up([key]))),
         ("4 + " + btn + " held 2.5s",          lambda: (inj.down(b), wait(0.017), inj.down([key]), wait(2.5), inj.up([key] + b))),
         ("6 held, " + btn + " tapped twice",   lambda: (inj.down(f), wait(0.1), inj.down([key]), wait(0.05), inj.up([key]), wait(0.15), inj.down([key]), wait(0.05), inj.up([key] + f))),
+        ("2 + " + btn + " together",           lambda: (inj.down(["down", key]), wait(0.05), inj.up(["down", key]))),
+        ("2 held 0.3s, then " + btn,           lambda: (inj.down(["down"]), wait(0.3), inj.down([key]), wait(0.05), inj.up(["down", key]))),
+        ("1 (back+down) + " + btn,             lambda: (inj.down(b), wait(0.017), inj.down(["down", key]), wait(0.05), inj.up(["down", key] + b))),
+        ("3 (fwd+down) + " + btn,              lambda: (inj.down(f), wait(0.017), inj.down(["down", key]), wait(0.05), inj.up(["down", key] + f))),
+        ("66 dash, 2 + " + btn,                lambda: (inj.down(f), wait(0.03), inj.up(f), wait(0.03), inj.down(f), wait(0.15), inj.up(f), wait(0.017), inj.down(["down", key]), wait(0.05), inj.up(["down", key]))),
+        ("8 + " + btn + " together",           lambda: (inj.down(["up", key]), wait(0.05), inj.up(["up", key]))),
         ("left+right together + " + btn,       lambda: (inj.down(f + b), wait(0.017), inj.down([key]), wait(0.05), inj.up([key] + f + b))),
     ]
     print(f"probing for cmd {want_cmd} with {btn}. F10 aborts.")
