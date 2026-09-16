@@ -247,6 +247,10 @@ def calibrate(sides, inj, facing_right, hot):
     order = [(0, b) for b in ("P", "K", "PK", "HK", "S", "T")]
     for d in (6, 4, 2, 8, 3, 9, 1, 7):
         order += [(d, b) for b in ("P", "K", "PK", "HK", "S")]
+    # "hold the direction" commands (the screen said hold left/right + P+K
+    # for the move the demo read as cmd 5780): direction held 0.35 s first
+    for d in (6, 4):
+        order += [(f"{d}h", b) for b in ("P", "K", "PK", "HK", "S")]
     table = {}
     print("calibrating: stand idle in the game and do not touch the keys "
           f"({len(order)} inputs, ~1 s each). F10 aborts.")
@@ -263,13 +267,15 @@ def calibrate(sides, inj, facing_right, hot):
         time.sleep(0.25)
         me.refresh()
         cmd0 = me.get("CommandCode")
-        dx, dy = NUMPAD.get(digit, (0, 0)) if digit else (0, 0)
+        held = isinstance(digit, str) and digit.endswith("h")
+        dnum = int(str(digit).rstrip("h")) if digit else 0
+        dx, dy = NUMPAD.get(dnum, (0, 0)) if dnum else (0, 0)
         if not facing_right:
             dx = -dx
         horiz, vert = dirs_to_names(dx, 0), dirs_to_names(0, dy)
         key = BUTTON_KEY[btn]
         if horiz:
-            inj.down(horiz); time.sleep(0.017)
+            inj.down(horiz); time.sleep(0.35 if held else 0.017)
         inj.down(vert + [key]); time.sleep(0.045)
         inj.up([key]); inj.up(vert + horiz)
         got_cmd = got_mv = None
