@@ -116,7 +116,7 @@ def decode(cmd):
 # family it belongs to (1350..1353 were the hits of an H+K string, 1083 and
 # 1085 P-family follow-ups, 5000..5002 and 5510 S-family). Candidates are
 # tried in order across replays until one produces the demo's move id.
-FAMILY = {10: "P", 11: "K", 12: "PK", 13: "HK", 15: "K", 55: "S", 50: "S", 57: "PK", 20: "K"}
+FAMILY = {10: "P", 11: "K", 55: "S", 50: "S", 57: "PK"}   # 13xx / 20xx were stance and hit follow-ups
 
 
 def candidates(cmd, want_mv=None):
@@ -129,7 +129,8 @@ def candidates(cmd, want_mv=None):
     if want_mv in MOVE_TABLE:
         out.append(MOVE_TABLE[want_mv])
     fam = FAMILY.get(cmd // 100)
-    for b in ([fam] if fam else []) + ["P", "K", "PK", "HK", "S"]:
+    first = ["6S", "S"] if fam == "S" else ([fam] if fam else [])   # 6S: the Break Blow (8381)
+    for b in first + ["P", "PK", "K", "HK", "S"]:
         if b not in out:
             out.append(b)
     digit = (cmd % 100) // 10
