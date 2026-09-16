@@ -1377,7 +1377,8 @@ def main():
         (25773 / 32057 / 32043 in the first session) is not holdable:
         stop wasting inputs there."""
         ok, n = stun_tab.get(rid, (0, 0))
-        return n >= 3 and ok == 0
+        # 24099 went 1 for 15: one lucky catch must not keep a stun alive
+        return (n >= 3 and ok == 0) or (n >= 10 and ok / n < 0.15)
 
     try:
         with open(ANSWERS_FILE, encoding="utf-8") as fh:
