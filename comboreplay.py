@@ -66,14 +66,17 @@ def load_commands(path="commands.json"):
         return
     for tok, v in table.items():
         c = v.get("cmd")
-        if not c:
+        if not c or tok.startswith("_"):
             continue
         cur = CMD_TABLE.get(c)
         rank = (tok.endswith("h") or "h" in tok[:-2], len(tok))
         if cur is None or rank < (cur[0].endswith("h") or "h" in cur[0][:-2], len(cur[0])):
             CMD_TABLE[c] = (tok.replace("h", ""), False)
-    for c, (tok, _) in list(CMD_TABLE.items()):
-        CMD_TABLE.setdefault(c + 10, (tok, True))
+    # codes learned by replaying (cmd -> token that produced the wanted move)
+    for c_s, tok in table.get("_learned", {}).items():
+        CMD_TABLE[int(c_s)] = (tok, False)
+    # (the "+10 = button held" rule is gone: 5510 is the second S of the
+    # Fatal Rush, 5780 is the 46P+K motion)
 
 
 def split_token(tok):
@@ -101,6 +104,27 @@ def decode(cmd):
             d = (cmd - base) // 10
             return ([d] if d else []), btn, False
     return None
+
+
+# A code we have never produced ourselves: the hundreds say which button
+# family it belongs to (1350..1353 were the hits of an H+K string, 1083 and
+# 1085 P-family follow-ups, 5000..5002 and 5510 S-family). Candidates are
+# tried in order across replays until one produces the demo's move id.
+FAMILY = {10: "P", 11: "K", 12: "PK", 13: "HK", 15: "K", 55: "S", 50: "S", 57: "PK", 20: "K"}
+
+
+def candidates(cmd):
+    fam = FAMILY.get(cmd // 100)
+    if fam is None:
+        return []
+    digit = (cmd % 100) // 10
+    out = [fam]                                  # the plain button first: string hits
+    if digit and digit in NUMPAD:
+        out.append(f"{digit}{fam}")
+    for other in ("P", "K", "PK", "HK", "S"):
+        if other != fam:
+            out.append(other)
+    return out
 
 
 def token(cmd):
@@ -216,11 +240,15 @@ def plan(events):
     return steps
 
 
-def press(inj, tok_cmd, facing_right, hold=0.045):
-    d = decode(tok_cmd)
-    if d is None:
-        return False
-    digits, btn, held = d
+def press(inj, tok_cmd, facing_right, hold=0.045, tok=None):
+    if tok is not None:
+        digits, btn = split_token(tok)
+        held = False
+    else:
+        d = decode(tok_cmd)
+        if d is None:
+            return False
+        digits, btn, held = d
     if held:
         hold = 0.7                  # a charged version: keep the button down
     # a motion (46P+K): tap every direction but the last, 2 frames each
@@ -251,26 +279,61 @@ def press(inj, tok_cmd, facing_right, hold=0.045):
     return True
 
 
-def replay(me, steps, inj, facing_right, lag_frames=2):
+MOVE_CMDS = {9: "66", 4: "44"}      # dashes seen in a demo (moves 3 / 5)
+
+
+def replay(me, steps, inj, facing_right, lag_frames=2, tries=None):
+    """Play the steps back. A step the demo made from idle (prev move 0)
+    waits for OUR idle; a string follow-up waits for the previous produced
+    move and its frame. Unknown codes go through the family candidates,
+    one per replay, and a candidate that produces the wanted move id is
+    saved to commands.json so the next replay knows it."""
+    tries = tries if tries is not None else {}
     print(f"replaying {len(steps)} input(s): " + " ".join(s["tok"] for s in steps))
     me.refresh()
-    results = []
+    results, learned = [], {}
     for i, s in enumerate(steps):
+        from_idle = s["prev_mv"] in IDLE_MOVES
         if i > 0:
-            # wait for the previous produced move, then for its frame
-            want_mv, want_fr = steps[i - 1]["mv"], max(1, s["prev_fr"] - lag_frames)
             t0 = time.perf_counter()
-            while time.perf_counter() - t0 < 1.0:
-                me.refresh()
-                mv, fr = me.get("CurrentMove"), me.get("CurrentMoveFrame")
-                if (want_mv is None or mv == want_mv) and fr >= want_fr and mv not in IDLE_MOVES:
-                    break
-                if mv in IDLE_MOVES and time.perf_counter() - t0 > 0.25:
-                    break               # the string dropped: press anyway
-                time.sleep(0.001)
-        ok = press(inj, s["cmd"], facing_right)
-        # what came out: every id the move goes through until it ends or
-        # the next step is due (a charged move changes id while held)
+            if from_idle:
+                while time.perf_counter() - t0 < 2.5:      # the demo waited for idle
+                    me.refresh()
+                    if me.get("CurrentMove") in IDLE_MOVES and me.get("MoveKind") == 0:
+                        break
+                    time.sleep(0.001)
+                time.sleep(0.03)
+            else:
+                want_mv, want_fr = steps[i - 1]["mv"], max(1, s["prev_fr"] - lag_frames)
+                while time.perf_counter() - t0 < 1.0:
+                    me.refresh()
+                    mv, fr = me.get("CurrentMove"), me.get("CurrentMoveFrame")
+                    if (want_mv is None or mv == want_mv) and fr >= want_fr and mv not in IDLE_MOVES:
+                        break
+                    if mv in IDLE_MOVES and time.perf_counter() - t0 > 0.25:
+                        break               # the string dropped: press anyway
+                    time.sleep(0.001)
+        cmd = s["cmd"]
+        used = None
+        if decode(cmd) is not None:
+            ok = press(inj, cmd, facing_right)
+            used = token(cmd)
+        elif cmd in MOVE_CMDS:
+            used = MOVE_CMDS[cmd]
+            d = 1 if (used == "66") == facing_right else -1
+            names = dirs_to_names(d, 0)
+            inj.down(names); time.sleep(0.033); inj.up(names); time.sleep(0.017)
+            inj.down(names); time.sleep(0.05); inj.up(names)
+            ok = True
+        else:
+            cands = candidates(cmd)
+            if cands:
+                n = tries.get(cmd, 0)
+                used = cands[n % len(cands)]
+                tries[cmd] = n + 1
+                ok = press(inj, cmd, facing_right, tok=used)
+            else:
+                ok = False
         ids = []
         prev = steps[i - 1]["mv"] if i else None
         t1 = time.perf_counter()
@@ -286,14 +349,29 @@ def replay(me, steps, inj, facing_right, lag_frames=2):
             elif ids:
                 break
             time.sleep(0.001)
-        hit = s["mv"] in ids
+        hit = s["mv"] is not None and s["mv"] in ids
+        if hit and decode(cmd) is None and used and used not in MOVE_CMDS.values():
+            learned[cmd] = used
         results.append((s["tok"], s["mv"], ids))
         print(f"  {i + 1:>2}. {s['tok']:<10} wanted move {s['mv']}  got "
               f"{'>'.join(map(str, ids)) if ids else None}"
+              + (f"  tried {used}" if decode(cmd) is None and used else "")
               + ("" if ok else "  (unknown code, nothing pressed)")
               + ("  OK" if hit else ""))
-    hits = sum(1 for _, w, g in results if w in g)
+    hits = sum(1 for _, w, g in results if w is not None and w in g)
     print(f"  {hits}/{len(results)} moves matched the demonstration")
+    if learned:
+        try:
+            with open("commands.json", encoding="utf-8") as fh:
+                table = json.load(fh)
+        except (OSError, ValueError):
+            table = {}
+        table.setdefault("_learned", {}).update({str(c): t for c, t in learned.items()})
+        with open("commands.json", "w", encoding="utf-8") as fh:
+            json.dump(table, fh, indent=1)
+        for c, t in learned.items():
+            CMD_TABLE[c] = (t, False)
+        print("  learned: " + ", ".join(f"cmd {c} = {t}" for c, t in learned.items()) + "  (commands.json)")
 
 
 def calibrate(sides, inj, facing_right, hot):
@@ -485,6 +563,7 @@ def main():
         if events is None:
             break
         steps = plan(events)
+        tries = {}
         print("\nrecorded: " + "  ".join(f"{s['tok']}->{s['mv']}@{s['prev_fr']}" for s in steps))
         print("F8 replay   F5 record again   F7 save   F10 quit")
         while True:
@@ -498,7 +577,7 @@ def main():
                     json.dump({"events": events, "steps": steps}, fh, indent=1)
                 print("  saved demo.json")
             if "F8" in keys:
-                replay(me, steps, inj, facing_right, args.lag_frames)
+                replay(me, steps, inj, facing_right, args.lag_frames, tries)
                 print("F8 replay   F5 record again   F7 save   F10 quit")
             time.sleep(0.01)
 
