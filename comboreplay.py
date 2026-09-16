@@ -251,21 +251,30 @@ def replay(me, steps, inj, facing_right, lag_frames=2):
                     break               # the string dropped: press anyway
                 time.sleep(0.001)
         ok = press(inj, s["cmd"], facing_right)
-        # what came out
-        got = None
+        # what came out: every id the move goes through until it ends or
+        # the next step is due (a charged move changes id while held)
+        ids = []
+        prev = steps[i - 1]["mv"] if i else None
         t1 = time.perf_counter()
-        while time.perf_counter() - t1 < 0.35:
+        limit = 0.35 if i + 1 < len(steps) else 1.2
+        while time.perf_counter() - t1 < limit:
             me.refresh()
             mv = me.get("CurrentMove")
-            if mv not in IDLE_MOVES and mv != (steps[i - 1]["mv"] if i else None):
-                got = mv
+            if mv not in IDLE_MOVES and mv != prev:
+                if not ids or ids[-1] != mv:
+                    ids.append(int(mv))
+                if s["mv"] in ids and i + 1 < len(steps):
+                    break
+            elif ids:
                 break
             time.sleep(0.001)
-        results.append((s["tok"], s["mv"], got))
-        print(f"  {i + 1:>2}. {s['tok']:<6} wanted move {s['mv']}  got {got}"
+        hit = s["mv"] in ids
+        results.append((s["tok"], s["mv"], ids))
+        print(f"  {i + 1:>2}. {s['tok']:<10} wanted move {s['mv']}  got "
+              f"{'>'.join(map(str, ids)) if ids else None}"
               + ("" if ok else "  (unknown code, nothing pressed)")
-              + ("  OK" if got == s["mv"] else ""))
-    hits = sum(1 for _, w, g in results if w == g)
+              + ("  OK" if hit else ""))
+    hits = sum(1 for _, w, g in results if w in g)
     print(f"  {hits}/{len(results)} moves matched the demonstration")
 
 
@@ -279,6 +288,7 @@ def calibrate(sides, inj, facing_right, hot):
     for d in (6, 4, 2, 8, 3, 9, 1, 7):
         order += [(d, b) for b in ("P", "K", "PK", "HK", "S")]
     order += [(d, "T") for d in (6, 4, 2)]     # the throw-break inputs holdbot uses
+    order += [("6hb", "PK"), ("4hb", "P"), ("6hb", "K")]   # BUTTON held 1 s
     # "hold the direction" commands (the screen said hold left/right + P+K
     # for the move the demo read as cmd 5780): direction held 0.35 s first
     for d in (6, 4):
@@ -300,7 +310,8 @@ def calibrate(sides, inj, facing_right, hot):
         me.refresh()
         cmd0 = me.get("CommandCode")
         held = isinstance(digit, str) and digit.endswith("h")
-        dnum = int(str(digit).rstrip("h")) if digit else 0
+        held_btn = isinstance(digit, str) and digit.endswith("hb")
+        dnum = int(str(digit).rstrip("hb")) if digit else 0
         dx, dy = NUMPAD.get(dnum, (0, 0)) if dnum else (0, 0)
         if not facing_right:
             dx = -dx
@@ -308,24 +319,29 @@ def calibrate(sides, inj, facing_right, hot):
         key = BUTTON_KEY[btn]
         if horiz:
             inj.down(horiz); time.sleep(0.35 if held else 0.017)
-        inj.down(vert + [key]); time.sleep(0.045)
+        inj.down(vert + [key]); time.sleep(1.0 if held_btn else 0.045)
         inj.up([key]); inj.up(vert + horiz)
-        got_cmd = got_mv = None
+        # the CommandCode flickers through direction codes (2, 6, 1349...)
+        # on the way to the attack's own code: take the one in place on the
+        # frame the move id appears, and keep every id the move goes through
+        # (a charged 6P+K starts as 8427 and becomes 8428 while held)
+        got_cmd, ids = None, []
         t1 = time.perf_counter()
-        while time.perf_counter() - t1 < 0.4:
+        while time.perf_counter() - t1 < 0.9:
             me.refresh()
             c, m = me.get("CommandCode"), me.get("CurrentMove")
-            if got_cmd is None and c and c != cmd0:
-                got_cmd = int(c)
-            if got_mv is None and m not in IDLE_MOVES:
-                got_mv = int(m)
-            if got_cmd is not None and got_mv is not None:
+            if m not in IDLE_MOVES:
+                if not ids:
+                    got_cmd = int(c) if c else None
+                if not ids or ids[-1] != m:
+                    ids.append(int(m))
+            elif ids:
                 break
             time.sleep(0.002)
         tok = f"{digit if digit else ''}{btn}"
-        table[tok] = {"cmd": got_cmd, "move": got_mv}
-        print(f"  {tok:<5} -> cmd {got_cmd}  move {got_mv}")
-        time.sleep(0.6)
+        table[tok] = {"cmd": got_cmd, "move": ids[0] if ids else None, "ids": ids}
+        print(f"  {tok:<5} -> cmd {got_cmd}  move {'>'.join(map(str, ids)) if ids else None}")
+        time.sleep(0.4)
     with open("commands.json", "w", encoding="utf-8") as fh:
         json.dump(table, fh, indent=1)
     print("saved commands.json")
