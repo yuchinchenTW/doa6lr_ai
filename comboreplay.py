@@ -39,7 +39,10 @@ from pad import KeyboardInjector, dirs_to_names
 u32 = ctypes.WinDLL("user32", use_last_error=True)
 VK = {"F5": 0x74, "F7": 0x76, "F8": 0x77, "F10": 0x79}
 
-BUTTON_BASE = {1000: "P", 1100: "K", 1200: "PK", 1300: "HK", 1400: "S"}
+# P 1000 / K 1100 seen in matches; 5700 is P+K (a Combo Challenge demo of
+# 8P+K read cmd 5780 and produced move 8428 - the 84xx ids are the P+K
+# family seen from pokes). H+K and S bases are still unknown.
+BUTTON_BASE = {1000: "P", 1100: "K", 5700: "PK"}
 BUTTON_KEY = {"P": "punch", "K": "kick", "PK": "pk", "HK": "hk", "S": "special",
               "T": "throw", "H": "free"}
 NUMPAD = {1: (-1, -1), 2: (0, -1), 3: (1, -1), 4: (-1, 0), 5: (0, 0),
@@ -119,6 +122,13 @@ def record(sides, hot, rebind):
                     started = now
                     last_cmd, last_mv = st[2], None
                     print(f"  demo started on {name}")
+                    if st[2]:
+                        # the first command is already in place when we
+                        # notice the demo: record it (a one-move stage has
+                        # nothing else, and the first recording had 0 inputs)
+                        events.append({"t": 0.0, "cmd": int(st[2]), "tok": token(st[2]),
+                                       "prev_mv": 0, "prev_fr": 0})
+                        print(f"   0.000s  input {token(st[2]):<6} (cmd {st[2]})  first")
                     break
             if started is None:
                 time.sleep(0.002)
