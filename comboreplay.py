@@ -238,8 +238,65 @@ def replay(me, steps, inj, facing_right, lag_frames=2):
     print(f"  {hits}/{len(results)} moves matched the demonstration")
 
 
+def calibrate(sides, inj, facing_right, hot):
+    """Press every button with every direction our keys can make, read the
+    CommandCode and move id the game gives each one, and print the table.
+    Answers two questions at once: what each cmd number means, and which
+    directions actually register through SendInput."""
+    me = sides["P1"]
+    order = [(0, b) for b in ("P", "K", "PK", "HK", "S", "T")]
+    for d in (6, 4, 2, 8, 3, 9, 1, 7):
+        order += [(d, b) for b in ("P", "K", "PK", "HK", "S")]
+    table = {}
+    print("calibrating: stand idle in the game and do not touch the keys "
+          f"({len(order)} inputs, ~1 s each). F10 aborts.")
+    for digit, btn in order:
+        if "F10" in hot.pressed():
+            break
+        # wait until we are idle again
+        t0 = time.perf_counter()
+        while time.perf_counter() - t0 < 3.0:
+            me.refresh()
+            if me.get("CurrentMove") in IDLE_MOVES and me.get("MoveKind") == 0:
+                break
+            time.sleep(0.005)
+        time.sleep(0.25)
+        me.refresh()
+        cmd0 = me.get("CommandCode")
+        dx, dy = NUMPAD.get(digit, (0, 0)) if digit else (0, 0)
+        if not facing_right:
+            dx = -dx
+        horiz, vert = dirs_to_names(dx, 0), dirs_to_names(0, dy)
+        key = BUTTON_KEY[btn]
+        if horiz:
+            inj.down(horiz); time.sleep(0.017)
+        inj.down(vert + [key]); time.sleep(0.045)
+        inj.up([key]); inj.up(vert + horiz)
+        got_cmd = got_mv = None
+        t1 = time.perf_counter()
+        while time.perf_counter() - t1 < 0.4:
+            me.refresh()
+            c, m = me.get("CommandCode"), me.get("CurrentMove")
+            if got_cmd is None and c and c != cmd0:
+                got_cmd = int(c)
+            if got_mv is None and m not in IDLE_MOVES:
+                got_mv = int(m)
+            if got_cmd is not None and got_mv is not None:
+                break
+            time.sleep(0.002)
+        tok = f"{digit if digit else ''}{btn}"
+        table[tok] = {"cmd": got_cmd, "move": got_mv}
+        print(f"  {tok:<5} -> cmd {got_cmd}  move {got_mv}")
+        time.sleep(0.6)
+    with open("commands.json", "w", encoding="utf-8") as fh:
+        json.dump(table, fh, indent=1)
+    print("saved commands.json")
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--calibrate", action="store_true",
+                    help="press every input once and print the cmd / move it produces")
     ap.add_argument("--process", default=None)
     ap.add_argument("--me", default="P1", choices=["P1", "P2"])
     ap.add_argument("--facing", default="right", choices=["right", "left"],
@@ -266,6 +323,10 @@ def main():
     inj = KeyboardInjector()
     hot = Hotkeys()
     facing_right = args.facing == "right"
+    if args.calibrate:
+        calibrate(sides, inj, facing_right, hot)
+        inj.release_all()
+        return
 
     steps = None
     while True:
