@@ -185,15 +185,20 @@ def press(inj, tok_cmd, facing_right, hold=0.045):
     dx, dy = NUMPAD.get(digit, (0, 0)) if digit else (0, 0)
     if not facing_right:
         dx = -dx
-    names = dirs_to_names(dx, dy)
     key = BUTTON_KEY[btn]
-    if names:
-        inj.down(names)             # both direction keys in ONE SendInput
-        time.sleep(0.017)           # a frame ahead of the button
-    inj.down([key])
+    horiz = dirs_to_names(dx, 0)
+    vert = dirs_to_names(0, dy)
+    # The recipe the diagonal holds (7H / 1H) land with: the horizontal a
+    # frame ahead, then the VERTICAL AND THE BUTTON IN ONE SendInput call.
+    # A vertical sent on its own a frame early is read as a sidestep and
+    # the button then comes out neutral (8P+K replayed as P+K, move 8119).
+    if horiz:
+        inj.down(horiz)
+        time.sleep(0.017)
+    inj.down(vert + [key])
     time.sleep(hold)
     inj.up([key])
-    inj.up(names)
+    inj.up(vert + horiz)
     return True
 
 
