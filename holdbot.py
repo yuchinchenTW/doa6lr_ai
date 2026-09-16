@@ -1467,12 +1467,19 @@ def main():
         inj.down(["throw"]); time.sleep(args.press)
         inj.up(["throw"] + names)
 
+    wait_failed = {}        # throw start move -> times we stood for a T throw and the break failed
+
     def finish_escape_seq():
         seq = escape["seq"]
         if seq is None:
             return
         escape["seq"] = None
         ok = me.get("CurrentHealth") >= seq["hp0"]
+        if not ok:
+            wait_failed[seq["st"]] = wait_failed.get(seq["st"], 0) + 1
+            if wait_failed[seq["st"]] == 2:
+                print(f"  !    {seq['st']}: standing for the break has cost us twice - "
+                      f"answering it like a command throw from now on")
         st = throw_esc.setdefault(f"cmd{seq['cmd']}", {})
         st.setdefault(seq["opt"], [0, 0])
         st[seq["opt"]][0] += 1 if ok else 0
@@ -2597,10 +2604,12 @@ def main():
                 answer = args.throw_answer
                 t_cmd, t_hml = throw_cmd.get(mv, (None, None))
                 t_cls = throw_class(t_cmd, t_hml)
-                if answer == "crouch" and t_cls in ("low", "T"):
+                if (answer == "crouch" and t_cls in ("low", "T")
+                        and wait_failed.get(mv, 0) < 2):
                     # 2T grabs crouchers only and we stand; the plain T we
                     # escape by pressing T as it grabs (4/4). Stay put, and
-                    # punish the whiff
+                    # punish the whiff. Unless this one's break keeps
+                    # failing (8181 -> 8252, cmd 111, 0/3): then duck/back/side
                     answer = "wait"
                 elif answer == "crouch":
                     if (t_left is not None and t_left >= args.throw_jab_frames
