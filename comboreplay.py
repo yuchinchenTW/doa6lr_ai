@@ -313,14 +313,13 @@ def record(sides, hot, rebind):
                 if seen.get(name) != st:
                     seen[name] = st
                     print(f"    [{name}] move {st[0]} kind {st[1]} cmd {st[2]}")
-                # MoveKind 3/16/5 covers strikes and throws for the
-                # characters seen so far, but Minato's first Combo Challenge
-                # move reads kind 2 (move 8130, cmd 5900) and the recorder sat
-                # in the wait loop forever. An attack command code is the
-                # reliable tell: walking and dashing are cmd 3/4/9/60/135,
-                # every attack is 1000+.
-                if st[0] not in IDLE_MOVES and (st[1] in (2, 3, 5, 16)
-                                                or (st[2] or 0) >= 1000):
+                # MoveKind 3/16/5 covered the characters seen first, but
+                # Minato's opening move reads kind 2 (move 8130) and the
+                # recorder waited forever. Any NON-ZERO kind is a move of
+                # ours; kind 0 is neutral, walking and - for Minato - her
+                # dance, whose echo codes run past 1000 and started the
+                # recording on move 8025 when the code alone was trusted.
+                if st[0] not in IDLE_MOVES and st[1]:
                     me = sd
                     foe = [o for n, o in sides.items() if n != name][0]
                     started = now
