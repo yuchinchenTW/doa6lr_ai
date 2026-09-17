@@ -449,7 +449,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
     tries = tries if tries is not None else {}
     print(f"replaying {len(steps)} input(s): " + " ".join(s["tok"] for s in steps))
     me.refresh()
-    results, learned = [], {}
+    results, learned, misses = [], {}, []
     t_prev_press = time.perf_counter()
     for i, s in enumerate(steps):
         from_idle = s["prev_mv"] in IDLE_MOVES
@@ -575,6 +575,8 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             learned[cmd] = used
         if not hit and s["mv"] is not None and ids:
             tries.setdefault("_miss", []).append((s["tok"], used, ids[0]))
+        if not hit and used and decode(cmd) is None:
+            misses.append((s["tok"], cmd, s["mv"], used))
         results.append((s["tok"], s["mv"], ids))
         print(f"  {i + 1:>2}. {s['tok']:<10} wanted move {s['mv']}  got "
               f"{'>'.join(map(str, ids)) if ids else None}"
@@ -586,6 +588,11 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
               + ("  OK" if hit else ""))
     hits = sum(1 for _, w, g in results if w is not None and w in g)
     print(f"  {hits}/{len(results)} moves matched the demonstration")
+    for nm, cmd_m, mv_m, used_m in misses:
+        cands = candidates(cmd_m, mv_m)
+        if cands:
+            nxt = cands[tries.get((cmd_m, mv_m), 0) % len(cands)]
+            print(f"      {nm}: {used_m} was wrong - press F8 again to try {nxt}")
     if learned:
         table = read_commands()
         char = me.get("CurrentCharacter")
