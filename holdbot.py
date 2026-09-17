@@ -1249,7 +1249,10 @@ def main():
             # needs longer. No walking happens between combo inputs, so this
             # is the only way the dash reaches.
             d_dash, _ = distance()
-            run = 0.13 if not d_dash else max(0.08, min(0.35, d_dash / 1100.0))
+            # 0.13 s is the floor, not a midpoint: a shorter run-up is not read
+            # as a dash at all and 66P comes out as a plain 6P (177). Scale it
+            # UP with the gap, never down.
+            run = 0.13 if not d_dash else max(0.13, min(0.35, d_dash / 1100.0))
             inj.down(horiz)
             time.sleep(run)
             inj.down(vert + [btn])
