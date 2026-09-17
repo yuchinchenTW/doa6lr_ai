@@ -1644,12 +1644,22 @@ def main():
                 prev_tok = None
                 for n_st, st in enumerate(steps):
                     tok = st[2]
-                    if n_st and n_st < len(dts_t) and dts_t[n_st] > 0.05:
-                        # the whole gap, less the input lag: H+K runs to 0.716 s
-                        # and 80% of its 0.735 s gap still landed inside it
-                        wait_t = dts_t[n_st] - 0.03 - (time.perf_counter() - t_step)
-                        if wait_t > 0:
-                            time.sleep(wait_t)
+                    if n_st:
+                        # Two conditions, both of which the match engine uses.
+                        # The game only buffers during a move's RECOVERY, so a
+                        # follow-up pressed while the previous one is still
+                        # active is dropped (the second P of HK,PPPP vanished
+                        # and the third started a fresh string). And the demo's
+                        # own gap is the floor.
+                        need_t = (dts_t[n_st] - 0.03) if n_st < len(dts_t) else 0.0
+                        t_w = time.perf_counter()
+                        while time.perf_counter() - t_w < 1.2:
+                            me.refresh()
+                            ready_t = (me.get("MoveKind") == 0
+                                       or me.get("Phase") >= PH_RECOVERY)
+                            if ready_t and time.perf_counter() - t_step >= need_t:
+                                break
+                            time.sleep(0.003)
                     before = me.get("CurrentMove")
                     if n_st and me.get("MoveKind") in (4, 5, 6):
                         # a throw or hold is playing: its window is at the END
