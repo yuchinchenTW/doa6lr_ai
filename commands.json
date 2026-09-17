@@ -1113,13 +1113,15 @@
     "move": 177,
     "ids": [
      177
-    ]
+    ],
+    "stale": "measured before the down-diagonal fix - recalibrate"
    },
    "3K": {
-    "cmd": 1280,
-    "move": 8087,
+    "cmd": 1320,
+    "move": 180,
     "ids": [
-     8087
+     180,
+     8093
     ]
    },
    "3PK": {
@@ -1127,14 +1129,16 @@
     "move": 8103,
     "ids": [
      8103
-    ]
+    ],
+    "stale": "measured before the down-diagonal fix - recalibrate"
    },
    "3HK": {
     "cmd": 1450,
     "move": 8114,
     "ids": [
      8114
-    ]
+    ],
+    "stale": "measured before the down-diagonal fix - recalibrate"
    },
    "3S": {
     "cmd": 5500,
@@ -1183,28 +1187,32 @@
     "move": 8071,
     "ids": [
      8071
-    ]
+    ],
+    "stale": "measured before the down-diagonal fix - recalibrate"
    },
    "1K": {
     "cmd": 1300,
     "move": 8091,
     "ids": [
      8091
-    ]
+    ],
+    "stale": "measured before the down-diagonal fix - recalibrate"
    },
    "1PK": {
     "cmd": 1950,
     "move": 8035,
     "ids": [
      8035
-    ]
+    ],
+    "stale": "measured before the down-diagonal fix - recalibrate"
    },
    "1HK": {
     "cmd": 1440,
     "move": 8113,
     "ids": [
      8113
-    ]
+    ],
+    "stale": "measured before the down-diagonal fix - recalibrate"
    },
    "1S": {
     "cmd": 5500,
@@ -1218,28 +1226,32 @@
     "move": 8071,
     "ids": [
      8071
-    ]
+    ],
+    "stale": "measured before the down-diagonal fix - recalibrate"
    },
    "7K": {
     "cmd": 1270,
     "move": 193,
     "ids": [
      193
-    ]
+    ],
+    "stale": "measured before the down-diagonal fix - recalibrate"
    },
    "7PK": {
     "cmd": 1950,
     "move": 8035,
     "ids": [
      8035
-    ]
+    ],
+    "stale": "measured before the down-diagonal fix - recalibrate"
    },
    "7HK": {
     "cmd": 1440,
     "move": 8113,
     "ids": [
      8113
-    ]
+    ],
+    "stale": "measured before the down-diagonal fix - recalibrate"
    },
    "7S": {
     "cmd": 5500,
@@ -1468,6 +1480,13 @@
     "1320": "3K",
     "1321": "K",
     "1190": "66P"
+   },
+   "66P": {
+    "cmd": 1190,
+    "move": 8077,
+    "ids": [
+     8077
+    ]
    }
   }
  }
