@@ -1605,6 +1605,9 @@ def main():
         inj.up(["throw"] + names)
 
     wait_failed = {}        # throw start move -> times we stood for a T throw and the break failed
+    far_whiff = {}          # throw start move -> consecutive whiffs seen from 140+ away
+    far_note = [None]
+    round_end = [0.0]       # when a health bar last hit 0: no pokes into the KO camera
 
     def finish_escape_seq():
         seq = escape["seq"]
@@ -1752,6 +1755,8 @@ def main():
                 by_rem.setdefault(e["rem"], [0, 0])[0] += 1
         elif e["after"] == e["mv0"]:
             no_reaction += 1
+            if e["kind"] == "poke" and by_kind.get("poke", [0, 0])[1] > 0:
+                by_kind["poke"][1] -= 1     # never came out: not a read poke
             print(f"        {e['label']} no reaction from our character "
                   f"(move stayed {e['mv0']})")
         if (not ok and e["kind"] not in ("jab", "punish", "approach", "poke") and args.trace
@@ -2035,9 +2040,11 @@ def main():
             foe_hp_now = foe.get("CurrentHealth")
             if foe_hp_now == 0 and prev_hp[1] > 0:
                 rounds[0] += 1
+                round_end[0] = now
                 print(f"  ===== ROUND WON  ({rounds[0]}-{rounds[1]}) our hp {my_hp_now}")
             if my_hp_now == 0 and prev_hp[0] > 0:
                 rounds[1] += 1
+                round_end[0] = now
                 print(f"  ===== round lost ({rounds[0]}-{rounds[1]}) their hp {foe_hp_now}")
             prev_hp[:] = [my_hp_now, foe_hp_now]
             if my_hp_now < last_my_hp and me.get("MoveType") in (0, 10, 13, 17):
@@ -2501,6 +2508,9 @@ def main():
                             and now - last_answer["t"] < 1.5):
                         record_answer(False)
                     key = f"{st_mv}/{mv} cmd {st_cmd} {throw_class(st_cmd, st_hml)}"
+                    far_whiff[st_mv] = 0            # it reached us after all
+                    if far_note[0] == st_mv:
+                        far_note[0] = None
                     escape.update(mv=mv, t=now, hp=me.get("CurrentHealth"), key=key)
                     escape["tries"] += 1
                     escape["by"].setdefault(key, [0, 0])[1] += 1
@@ -2685,6 +2695,8 @@ def main():
                 # walks there; farther out only when it is closing in.
                 if (args.poke != "none" and not args.dry_run and my_free
                         and now - last_poke[0] > poke_gap_now()
+                        and now - round_end[0] > 4.0    # KO camera + intro: 23 dead pokes read
+                                                        # as misses and tripped the throttle
                         and now - last_fire > 0.3 and foe_idle and not in_danger
                         and me.get("CurrentMove") == 0
                         and args.poke_min <= d_now <= min(args.poke_max, args.jab_reach)):
@@ -2851,6 +2863,17 @@ def main():
                 if dist >= args.throw_punish_range or args.throw_answer == "none":
                     time.sleep(period)      # out of range: nothing to answer
                     continue
+                if far_whiff.get(mv, 0) >= 3 and dist >= 140:
+                    # char 28's 8183 was started from 175-185 sixty times in a
+                    # row; every duck answered air and the round ran out on
+                    # the clock. Out there it cannot reach us: let it whiff
+                    # and keep the poke / zoning logic running instead
+                    if far_note[0] != mv:
+                        far_note[0] = mv
+                        print(f"  ~    throw {mv} whiffed {far_whiff[mv]}x in a row from "
+                              f"{dist:.0f}: out of its reach - not answering it from 140+")
+                    time.sleep(period)
+                    continue
                 mv0 = me.get("CurrentMove")
                 answered_epoch[0] = throw_epoch[0]
                 t_known = startup.get(fchar, mv)
@@ -2961,6 +2984,8 @@ def main():
                         # crouch each time; 32 ducks, none came out)
                         if whiffed and answer == "duck":
                             record_answer(True)
+                        if whiffed:
+                            far_whiff[mv] = far_whiff.get(mv, 0) + 1 if dist >= 140 else 0
                         note = ("" if crouched or not key else "  (no crouch id)") \
                                + ("  (facing flipped)" if flipped_d else "") \
                                + ("  (down re-pressed)" if down_again else "") \
@@ -3044,6 +3069,8 @@ def main():
                              None, pre)
                         last_action[:] = ["punish", time.perf_counter()]
                         note = f"  -> {btn} @{d2:.0f}"
+                if whiffed:
+                    far_whiff[mv] = far_whiff.get(mv, 0) + 1 if dist >= 140 else 0
                 print(f"  ~    throw {mv:<6} -> step    dist={dist:.0f} "
                       f"frame={fr} left={t_left if t_left is not None else '?'}"
                       f"{'  (their throw whiffed)' if whiffed else ''}{note}")
