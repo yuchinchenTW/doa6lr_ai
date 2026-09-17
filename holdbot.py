@@ -1109,9 +1109,23 @@ def main():
         return best
 
     def press_best_throw(bt):
-        for st_t in parse_combo(bt):
+        """Each part goes in when the previous part's animation changes.
+
+        A fixed interval does not fit: Minato's four-part 214T ran 0.22, 0.51
+        and 0.48 s apart, so 0.25 s everywhere pressed the last two early and
+        the chain dropped."""
+        for n_t, st_t in enumerate(parse_combo(bt)):
+            if n_t:
+                mv_t = me.get("CurrentMove")
+                t_t = time.perf_counter()
+                while time.perf_counter() - t_t < 0.9:
+                    me.refresh()
+                    if me.get("MoveKind") == 0:
+                        break             # the throw ended: nothing to chain
+                    if me.get("CurrentMove") != mv_t:
+                        break             # next part of the animation: press now
+                    time.sleep(0.003)
             combo_press(st_t)
-            time.sleep(0.25)          # the demo's own interval between parts
 
     def cc_extra(char):
         """Combos the game's own Combo Challenge taught, cleared by
@@ -1621,7 +1635,13 @@ def main():
                         mv_n, k_n = me.get("CurrentMove"), me.get("MoveKind")
                         if k_n != 0 and mv_n != before and (not got or got[-1] != mv_n):
                             got.append(int(mv_n))
-                        if got and k_n == 0:
+                        # press the next token as soon as this one is out, the
+                        # way the engine does. Waiting for neutral put the
+                        # second part of a four-part throw 0.9 s late, where
+                        # the demo pressed it after 0.22 s.
+                        if got and time.perf_counter() - t_s > 0.12:
+                            break
+                        if k_n == 0 and time.perf_counter() - t_s > 0.4:
                             break
                         time.sleep(0.002)
                     want = expect.get(tok)
