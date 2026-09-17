@@ -2678,13 +2678,19 @@ def main():
                               f"{my_mv_tick}")
                     nxt = cseq[combo["i"]] if combo["i"] < len(cseq) else None
                     nxt_is_throw = nxt is not None and nxt[1] == "throw"
-                    ready = (my_type_now == MT_STRIKE
-                             and my_mv_tick not in (0, WALK_FWD, WALK_BACK)
-                             and my_mv_tick != combo["last_mv"]
-                             and (my_kind not in MK_STRIKES
-                                  or me.get("Phase") >= PH_RECOVERY))
+                    # MoveKind 13 is a stance (Minato's Shuffle, entered by
+                    # the bare "4" in P,P,P,4,6P). Nothing of ours is playing
+                    # there, so the stance move is ready for the next input
+                    # even though its MoveType is not the striking one.
+                    in_stance = my_kind == 13
+                    ready = (in_stance or
+                             (my_type_now == MT_STRIKE
+                              and my_mv_tick not in (0, WALK_FWD, WALK_BACK)
+                              and my_mv_tick != combo["last_mv"]
+                              and (my_kind not in MK_STRIKES
+                                   or me.get("Phase") >= PH_RECOVERY)))
                     do_press = repress = False
-                    waiting_ok = (my_idle or (my_type_now == MT_STRIKE
+                    waiting_ok = (my_idle or in_stance or (my_type_now == MT_STRIKE
                                               and my_mv_tick == combo["last_mv"]
                                               and me.get("Phase") >= PH_RECOVERY))
                     if combo.get("await_") and waiting_ok and (foe_open or nxt_is_throw) \
@@ -2713,7 +2719,7 @@ def main():
                             do_press = True
                         elif now - combo["t"] > 1.2 or (kind == 0 and now - combo["t"] > 0.3):
                             combo_reset("no ground-throw window")
-                    elif not foe_open and now - combo["t"] > 0.25:
+                    elif not foe_open and not in_stance and now - combo["t"] > 0.25:
                         combo_reset("they recovered" if kind == 0 else f"foe kind {kind}")
                     elif ready and nxt is not None and d_c > step_reach(nxt):
                         # P+K knocked them to 178: the PP after it can only
@@ -2722,7 +2728,8 @@ def main():
                     elif ready or (foe_open and my_idle and d_c <= args.combo_range
                                    and now - combo["t"] > 0.03):
                         do_press = True
-                    elif my_type_now in (MT_HIT, MT_THROWN, MT_HOLD_HIT, 7)                             and now - combo["t"] > 0.1:
+                    elif (my_type_now in (MT_HIT, MT_THROWN, MT_HOLD_HIT, 7)
+                          and not in_stance and now - combo["t"] > 0.1):
                         combo_reset(f"we are type {my_type_now}")   # hit / thrown / held
                     if do_press:
                         if zoning is not None:
