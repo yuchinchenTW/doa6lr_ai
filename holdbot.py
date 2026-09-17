@@ -1029,13 +1029,58 @@ def main():
     recipe_cache = {}
 
     def cc_all(char):
+        """Entries are a string, or {"seq": ..., "wall": true} for a combo
+        that only connects with the OPPONENT against a wall (Minato's
+        9K,6P,6P,6P whiffs in the open)."""
         try:
             with open("combo_challenge.json", encoding="utf-8") as fh:
-                return [t for t in json.load(fh).get(str(char), []) if t]
+                raw = json.load(fh).get(str(char), [])
         except (OSError, ValueError):
             return []
+        out = []
+        for e in raw:
+            if isinstance(e, dict) and e.get("seq"):
+                out.append((e["seq"], bool(e.get("wall"))))
+            elif isinstance(e, str) and e:
+                out.append((e, False))
+        return out
+
+    foe_span = {"x": [None, None], "z": [None, None]}
+
+    def note_foe_pos():
+        try:
+            fx, _, fz = foe.xyz()
+        except Exception:
+            return
+        for k, v in (("x", fx), ("z", fz)):
+            if not (-3e5 < v < 3e5) or v != v:
+                return
+            lo, hi = foe_span[k]
+            foe_span[k] = [v if lo is None else min(lo, v),
+                           v if hi is None else max(hi, v)]
+
+    def foe_at_wall(margin=0.12, need=300.0):
+        """Is the opponent backed against a wall?
+
+        There is no stage geometry in the layout, so the walls are inferred
+        from how far the opponent has actually been seen to travel this
+        session: once an axis has a span worth of data, being inside the
+        outer eighth of it means the wall is right there. No data yet reads
+        as "not at a wall", which is the safe answer."""
+        try:
+            fx, _, fz = foe.xyz()
+        except Exception:
+            return False
+        for k, v in (("x", fx), ("z", fz)):
+            lo, hi = foe_span[k]
+            if lo is None or hi - lo < need:
+                continue
+            if v - lo < (hi - lo) * margin or hi - v < (hi - lo) * margin:
+                return True
+        return False
 
     def best_throw(char):
+        # (cc_all now yields (sequence, wall-only) pairs)
         """The longest throw the Combo Challenge taught this character.
 
         A throw-led sequence is no use as a combo recipe - a character in hit
@@ -1044,7 +1089,7 @@ def main():
         throw punish after their whiff. Minato's 214T is a four-part command
         throw and the plain T beside it is small change."""
         best = None
-        for t in cc_all(char):
+        for t, _w in cc_all(char):
             toks = t.split(",")
             if toks[0].endswith("T") and (best is None or len(toks) > len(best.split(","))):
                 best = t
@@ -1060,11 +1105,7 @@ def main():
         comboreplay and written to combo_challenge.json. They join the
         character's "default" pool and the net-damage bandit prices them
         against everything else."""
-        try:
-            with open("combo_challenge.json", encoding="utf-8") as fh:
-                return [t for t in json.load(fh).get(str(char), []) if t]
-        except (OSError, ValueError):
-            return []
+        return cc_all(char)
 
     def choose_recipe(key):
         """Round-robin until every candidate has 3 tries, then the best mean
@@ -1074,8 +1115,10 @@ def main():
         if pool is not None and key == "default":
             # throw-led sequences are not combo material (no grabbing a
             # character in hit stun); best_throw uses those instead
-            pool = pool + [t for t in cc_extra(my_char)
-                           if t not in pool and not t.split(",")[0].endswith("T")]
+            at_wall = foe_at_wall()
+            pool = pool + [t for t, w in cc_extra(my_char)
+                           if t not in pool and not t.split(",")[0].endswith("T")
+                           and (at_wall or not w)]
         if not pool:
             return None, None
         stats = combo_bank.setdefault(str(my_char), {}).setdefault(str(key), {})
@@ -1393,6 +1436,8 @@ def main():
                 d = ((mx - fx) ** 2 + (mz - fz) ** 2) ** 0.5
         if d > 8:
             pos_zero[0] = time.perf_counter()
+        if pos_ok[0] and 0 < d < POS_MAX_D:
+            note_foe_pos()
         if abs(d - pos_last[0]) > 0.5 or foe.get("MoveKind") == 0:
             pos_last[:] = [d, time.perf_counter()]
         frozen = time.perf_counter() - pos_last[1] > 1.5   # a live foe never holds still this long

@@ -833,7 +833,8 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             except (OSError, ValueError):
                 cc = {}
             lst = cc.setdefault(str(ch), [])
-            if text not in lst:
+            have = [e["seq"] if isinstance(e, dict) else e for e in lst]
+            if text not in have:
                 lst.append(text)
                 with open(CC_FILE, "w", encoding="utf-8") as fh:
                     json.dump(cc, fh, indent=1, sort_keys=True)

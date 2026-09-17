@@ -5,6 +5,10 @@
   "HK,P,P,P,P",
   "8K,S,6S,6S,6S",
   "3K,3K,66P",
-  "P,P,P,4,6P"
+  "P,P,P,4,6P",
+  {
+   "seq": "9K,6P,6P,6P",
+   "wall": true
+  }
  ]
 }
