@@ -1054,6 +1054,11 @@ def main():
                 # cost 300+ in one match) - a string that gets us held scores low.
                 # A garbage health read (object swap) must not enter the bank
                 bank_result(combo["recipe"], combo.get("rkey", "default"), dealt - taken)
+        # the move we were in when the string ended must not open a NEW
+        # string a tick later: after "6P not accepted 6x" during our 8K, a
+        # fresh combo started on the same 8K, pressed 8K again into the
+        # buffer, and the 6P that followed came out as 8K (191)
+        combo["skip_mv"] = me.get("CurrentMove") if me.get("CurrentMove") not in (0,) else None
         combo.update(i=0, last_mv=None, t=0.0, hp0=None, hits=0, seq=[], opener=None,
                      recipe=None, rkey=None)
 
@@ -2317,7 +2322,10 @@ def main():
                              and my_mv_tick not in (0, WALK_FWD, WALK_BACK))
                 my_idle = my_type_now == MT_IDLE and my_mv_tick == 0
                 if combo["hp0"] is None:
-                    if foe_open and (in_strike or kind == 9):
+                    if combo.get("skip_mv") is not None and my_mv_tick != combo["skip_mv"]:
+                        combo["skip_mv"] = None        # we moved on: openers count again
+                    if (foe_open and (in_strike or kind == 9)
+                            and combo.get("skip_mv") is None):
                         rkey = my_mv_tick if (in_strike and my_mv_tick in combo_seqs) else "default"
                         recipe, seq = choose_recipe(rkey)
                         if seq is None:
