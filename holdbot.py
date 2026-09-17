@@ -1054,10 +1054,13 @@ def main():
         for e in raw:
             if isinstance(e, dict) and e.get("seq"):
                 out.append((e["seq"], bool(e.get("wall"))))
+                if e.get("dt"):
+                    cc_dt[e["seq"]] = [float(x) for x in e["dt"]]
             elif isinstance(e, str) and e:
                 out.append((e, False))
         return out
 
+    cc_dt = {}          # recipe -> the demo's interval before each input
     foe_span = {"x": [None, None], "z": [None, None]}
 
     def note_foe_pos():
@@ -1634,11 +1637,16 @@ def main():
                     time.sleep(0.005)
                 time.sleep(0.25)
                 steps = parse_combo(text)
+                dts_t = cc_dt.get(text) or []
                 print(f"  {text}" + (f"  (run {run_n + 1})" if args.test_repeat > 1 else ""))
                 hp0 = foe.get("CurrentHealth")
                 prev_tok = None
                 for n_st, st in enumerate(steps):
                     tok = st[2]
+                    if n_st and n_st < len(dts_t) and dts_t[n_st] > 0.05:
+                        wait_t = dts_t[n_st] * 0.8 - (time.perf_counter() - t_step)
+                        if wait_t > 0:
+                            time.sleep(wait_t)
                     before = me.get("CurrentMove")
                     if n_st and me.get("MoveKind") in (4, 5, 6):
                         # a throw or hold is playing: its window is at the END
@@ -1656,6 +1664,7 @@ def main():
                             time.sleep(0.004)
                     else:
                         combo_press(st)
+                    t_step = time.perf_counter()
                     got, t_s = [], time.perf_counter()
                     while time.perf_counter() - t_s < 0.9:
                         me.refresh()
@@ -2941,6 +2950,14 @@ def main():
                     elif ready or (foe_open and my_idle and d_c <= args.combo_range
                                    and now - combo["t"] > 0.03):
                         do_press = True
+                        # the demo's own interval, where we recorded one: H+K
+                        # runs 0.72 s and its follow-up comes after that, so
+                        # pressing as soon as the move appears loses the input
+                        dts = cc_dt.get(combo.get("recipe"))
+                        if dts and combo["i"] < len(dts):
+                            need = dts[combo["i"]] * 0.8
+                            if need > 0.05 and now - combo["t"] < need:
+                                do_press = False
                     elif (my_type_now in (MT_HIT, MT_THROWN, MT_HOLD_HIT, 7)
                           and not in_stance and now - combo["t"] > 0.1):
                         combo_reset(f"we are type {my_type_now}")   # hit / thrown / held
