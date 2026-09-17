@@ -50,6 +50,7 @@ NUMPAD = {1: (-1, -1), 2: (0, -1), 3: (1, -1), 4: (-1, 0), 5: (0, 0),
           6: (1, 0), 7: (-1, 1), 8: (0, 1), 9: (1, 1)}
 IDLE_MOVES = (0, 1, 2, 3, 4)
 CC_FILE = "combo_challenge.json"   # {char: ["HK,P,P,P,P", ...]} cleared stages
+STANCE_TOKEN = "4"                 # bare back: enters the Minato Shuffle
 NEUTRAL_IDS = set()   # animation ids this character shows while MoveKind is 0
 HELD_FWD = []         # forward left down by close_in so the next move carries it
 CHAR_TABLE = [False]  # this character's own calibration is loaded
@@ -808,7 +809,16 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
     # token sequence so holdbot can try it in a match: its bandit scores it by
     # net damage against everything else in the character's pool.
     if hits and hits == len(results) and len(results) > 1:
-        seq = [tk for tk in step_tokens if tk]
+        # The stance entry is a bare direction: it presses no button, so it
+        # never appears as a step, but without it holdbot's P,P,P,6P is just
+        # the fourth P of the string. "4" goes into the sequence where the
+        # recording saw the kind-13 transition.
+        seq = []
+        for st_i, tk in zip(steps, step_tokens):
+            if st_i.get("stance_before"):
+                seq.append(STANCE_TOKEN)
+            if tk:
+                seq.append(tk)
         # Everything is saved, throws included: holdbot skips a throw-led
         # sequence when picking a combo recipe (a character in hit stun cannot
         # be grabbed) and uses the longest one where it has decided to throw

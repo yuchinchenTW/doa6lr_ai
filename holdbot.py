@@ -1007,7 +1007,9 @@ def main():
                 i += 1
             digits, rest = tok[:i], tok[i:]
             btn = COMBO_BTN.get(rest)
-            if btn is None:
+            if btn is None and rest == "" and digits:
+                btn = None          # a bare direction: the stance entry, held
+            elif btn is None:       # with no button (Minato's PPP4 -> Shuffle)
                 print(f"combo: unknown token {tok!r}, ignored")
                 continue
             # "236P": every direction but the last is tapped first (motion)
@@ -1134,6 +1136,16 @@ def main():
 
     def combo_press(step):
         (dx, dy), btn, tok, motion = (step + ([],))[:4]
+        if btn is None:
+            # bare direction: hold it through the previous move's recovery so
+            # the stance transition takes, then let go
+            names_s = dirs_to_names(dx if facing_state[0] else -dx, dy)
+            if names_s:
+                inj.down(names_s)
+                time.sleep(0.18)
+                inj.up(names_s)
+                dir_touched[0] = time.perf_counter()
+            return tok
         dash = bool(motion) and motion[-1] == ((dx, dy))
         for mdx, mdy in motion:                      # 236P: tap 2, tap 3, then 6+P
             mn = dirs_to_names(mdx if facing_state[0] else -mdx, mdy)
