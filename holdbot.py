@@ -83,7 +83,8 @@ ESCAPES_FILE = "throw_escapes.json"  # {"cmd<CommandCode>": {"T": [ok, n], "6T":
 # 4T reads 1349, 2T reads 366 - so 365 is NOT 4T (left to the scoreboard)
 ESCAPE_GUESS = {363: "T", 400: "T",          # both broke with T every time (4/4, 2/2, 1/1 x3)
                 364: "6T", 1349: "4T", 366: "2T", 367: "2T"}
-ESCAPE_OPTIONS = ("T", "6T", "4T", "2T")
+ESCAPE_OPTIONS = ("T", "6T", "4T", "2T", "3T", "1T")   # 3T/1T: diagonal throws (cmd 365 sits
+                                                        # between 6T=364 and 2T=366; T 15/47)
 NOHOLD_FILE = "nohold.json"      # {char: [move ids]} - strikes our hold "caught" for 0 dmg
 STUN_FILE = "stun_holds.json"    # {our reaction id: [landed, tried]} - holds attempted
                                  # while that stun animation was playing
@@ -1590,6 +1591,14 @@ def main():
             names = dirs_to_names(-1 if facing_state[0] else 1, 0)
         elif opt == "2T":
             names = ["down"]
+        elif opt in ("3T", "1T"):
+            # diagonal: horizontal a frame ahead, down WITH the button (the
+            # recipe that landed 3K / 1P in the calibration)
+            h = dirs_to_names((1 if opt == "3T" else -1) * (1 if facing_state[0] else -1), 0)
+            inj.down(h); time.sleep(0.017)
+            inj.down(["down", "throw"]); time.sleep(args.press)
+            inj.up(["throw", "down"] + h)
+            return
         if names:
             inj.down(names); time.sleep(0.008)
         inj.down(["throw"]); time.sleep(args.press)
@@ -1603,6 +1612,14 @@ def main():
             return
         escape["seq"] = None
         ok = me.get("CurrentHealth") >= seq["hp0"]
+        if seq.get("hi") and not ok:
+            # a hi-counter throw (it caught us inside our own attack: 8149
+            # on our P after the run-up, 8284 on the 6P poke) cannot be
+            # broken in DOA6 - the break input tells nothing here, and it
+            # was booking those grabs against T and against "waiting"
+            print(f"        ! throw {seq['st']} (cmd {seq['cmd']}) caught our attack "
+                  f"(hi-counter): unbreakable, {seq['opt']} not scored")
+            return
         if not ok:
             wait_failed[seq["st"]] = wait_failed.get(seq["st"], 0) + 1
             if wait_failed[seq["st"]] == 2:
@@ -2470,8 +2487,15 @@ def main():
                         if escape["seq"] is not None:
                             finish_escape_seq()
                         opt = pick_escape(fchar, st_mv, st_cmd)
+                        # were we inside an attack (type 1, an attack id) in
+                        # the 8 frames before the grab? then it is hi-counter
+                        recent = [h for h in history[-14:] if now - h[0] < 0.14]
+                        older = [h for h in history[-14:] if now - h[0] >= 0.14]
+                        if older:
+                            recent.append(older[-1])   # the state in force when the window opened
+                        hi = any(h[5] == 1 and 170 <= h[4] < 40000 for h in recent)
                         escape["seq"] = {"st": st_mv, "cmd": st_cmd, "opt": opt,
-                                         "hp0": me.get("CurrentHealth"), "t": now}
+                                         "hp0": me.get("CurrentHealth"), "t": now, "hi": hi}
                     press_escape(escape["seq"]["opt"])
                     if (not last_answer["done"] and last_answer["mv"] == st_mv
                             and now - last_answer["t"] < 1.5):
@@ -2870,6 +2894,12 @@ def main():
                     if not last_answer["done"]:
                         record_answer(True)     # the previous one was not punished
                     last_answer.update(mv=mv, ans=answer, t=time.perf_counter(), done=False)
+                    if t_left is not None and t_left <= 3:
+                        # noticed too late (we were busy poking): the grab
+                        # that follows says nothing about the answer. 8284
+                        # booked three of those against a duck that is
+                        # 107/124 when it gets to start in time
+                        last_answer["done"] = True
                 if answer in ("back", "side", "duck", "wait", "lowkick", "hopkick"):
                     if answer in ("duck", "wait"):
                         key = (back_names() + ["down"]) if answer == "duck" else []
