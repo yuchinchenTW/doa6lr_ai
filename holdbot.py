@@ -1650,6 +1650,12 @@ def main():
                 time.sleep(0.25)
                 steps = parse_combo(text)
                 dts_t = cc_dt.get(text) or []
+                if not dts_t and len(steps) > 1 and not run_n:
+                    near = [k for k in cc_dt if set(k.split(",")) == set(text.split(","))]
+                    print(f"      (no timing stored for this string - every input "
+                          f"goes out as soon as the last one is seen"
+                          + (f"; did you mean \"{near[0]}\"?" if near else "")
+                          + ")")
                 print(f"  {text}" + (f"  (run {run_n + 1})" if args.test_repeat > 1 else ""))
                 hp0 = foe.get("CurrentHealth")
                 prev_tok = None
