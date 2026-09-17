@@ -965,8 +965,7 @@
     "cmd": 400,
     "move": 8137,
     "ids": [
-     8137,
-     170
+     8137
     ]
    },
    "6P": {
@@ -1110,36 +1109,30 @@
     ]
    },
    "3P": {
-    "cmd": 1110,
-    "move": 177,
+    "cmd": 1140,
+    "move": 8069,
     "ids": [
-     177
-    ],
-    "stale": "the calibration recipe dropped the down half - recalibrate"
+     8069
+    ]
    },
    "3K": {
     "cmd": 1320,
     "move": 180,
     "ids": [
-     180,
-     8093
+     180
     ]
    },
    "3PK": {
-    "cmd": 1380,
-    "move": 8103,
+    "cmd": 1410,
+    "move": 8109,
     "ids": [
-     8103
-    ],
-    "stale": "the calibration recipe dropped the down half - recalibrate"
+     8109
+    ]
    },
    "3HK": {
-    "cmd": 1450,
-    "move": 8114,
-    "ids": [
-     8114
-    ],
-    "stale": "the calibration recipe dropped the down half - recalibrate"
+    "cmd": null,
+    "move": null,
+    "ids": []
    },
    "3S": {
     "cmd": 5500,
@@ -1184,36 +1177,33 @@
     ]
    },
    "1P": {
-    "cmd": 1150,
-    "move": 8071,
+    "cmd": 1180,
+    "move": 8076,
     "ids": [
-     8071
-    ],
-    "stale": "the calibration recipe dropped the down half - recalibrate"
+     8076
+    ]
    },
    "1K": {
-    "cmd": 1300,
-    "move": 8091,
+    "cmd": 1340,
+    "move": 8095,
     "ids": [
-     8091
-    ],
-    "stale": "the calibration recipe dropped the down half - recalibrate"
+     8095,
+     8096
+    ]
    },
    "1PK": {
-    "cmd": 1950,
-    "move": 8035,
+    "cmd": 1400,
+    "move": 8108,
     "ids": [
-     8035
-    ],
-    "stale": "the calibration recipe dropped the down half - recalibrate"
+     8108
+    ]
    },
    "1HK": {
-    "cmd": 1440,
-    "move": 8113,
+    "cmd": 1450,
+    "move": 8114,
     "ids": [
-     8113
-    ],
-    "stale": "the calibration recipe dropped the down half - recalibrate"
+     8114
+    ]
    },
    "1S": {
     "cmd": 5500,
@@ -1227,32 +1217,28 @@
     "move": 8071,
     "ids": [
      8071
-    ],
-    "stale": "the calibration recipe dropped the down half - recalibrate"
+    ]
    },
    "7K": {
     "cmd": 1300,
     "move": 8091,
     "ids": [
      8091
-    ],
-    "stale": "the calibration recipe dropped the down half - recalibrate"
+    ]
    },
    "7PK": {
     "cmd": 1950,
     "move": 8035,
     "ids": [
      8035
-    ],
-    "stale": "the calibration recipe dropped the down half - recalibrate"
+    ]
    },
    "7HK": {
     "cmd": 1440,
     "move": 8113,
     "ids": [
      8113
-    ],
-    "stale": "the calibration recipe dropped the down half - recalibrate"
+    ]
    },
    "7S": {
     "cmd": 5500,
@@ -1420,16 +1406,14 @@
     "cmd": 400,
     "move": 8137,
     "ids": [
-     8137,
-     170
+     8137
     ]
    },
    "3T": {
-    "cmd": 401,
-    "move": 8138,
+    "cmd": 404,
+    "move": 8142,
     "ids": [
-     8138,
-     8146
+     8142
     ]
    },
    "9T": {
@@ -1440,10 +1424,10 @@
     ]
    },
    "1T": {
-    "cmd": 402,
-    "move": 8140,
+    "cmd": 404,
+    "move": 8142,
     "ids": [
-     8140
+     8142
     ]
    },
    "7T": {
@@ -1549,16 +1533,14 @@
     "cmd": 401,
     "move": 8138,
     "ids": [
-     8138,
-     8148
+     8138
     ]
    },
    "46T": {
     "cmd": 401,
     "move": 8138,
     "ids": [
-     8138,
-     8148
+     8138
     ]
    },
    "64T": {
@@ -1583,11 +1565,10 @@
     ]
    },
    "33T": {
-    "cmd": 401,
-    "move": 8138,
+    "cmd": 404,
+    "move": 8142,
     "ids": [
-     8138,
-     8146
+     8142
     ]
    },
    "22T": {
