@@ -1244,11 +1244,14 @@ def main():
         horiz, vert = dirs_to_names(sdx, 0), dirs_to_names(0, dy)
         if dash and horiz:
             # 66P is a RUN and then a punch, and the run is most of its range.
-            # Tapping forward and pressing 17 ms later produced the right move
-            # a step from where it started (the Combo Challenge's 66P fell
-            # short of the post until the run-up was held for ~0.14 s).
+            # The run-up has to cover the gap: 0.14 s was measured against a
+            # post 146 away, and a string that knocks the opponent further
+            # needs longer. No walking happens between combo inputs, so this
+            # is the only way the dash reaches.
+            d_dash, _ = distance()
+            run = 0.13 if not d_dash else max(0.08, min(0.35, d_dash / 1100.0))
             inj.down(horiz)
-            time.sleep(0.13)
+            time.sleep(run)
             inj.down(vert + [btn])
         elif horiz and vert and dy < 0:
             # A DOWN diagonal needs both directions in place before the
