@@ -1598,14 +1598,27 @@ def main():
                         break
                     time.sleep(0.005)
                 time.sleep(0.25)
-                steps = parse_combo(text)
                 dts_t = cc_dt.get(text) or []
-                if not dts_t and len(steps) > 1 and not run_n:
-                    near = [k for k in cc_dt if set(k.split(",")) == set(text.split(","))]
-                    print(f"      (no timing stored for this string - every input "
-                          f"goes out as soon as the last one is seen"
-                          + (f"; did you mean \"{near[0]}\"?" if near else "")
-                          + ")")
+                if not dts_t:
+                    # A stored string with the same length, first and last
+                    # token is the same combo under another spelling: the
+                    # second input of 3K,K,66P also works as 3K, and testing
+                    # the old name silently lost its timing.
+                    toks_t = text.split(",")
+                    near = [k for k in cc_dt
+                            if len(k.split(",")) == len(toks_t)
+                            and k.split(",")[0] == toks_t[0]
+                            and k.split(",")[-1] == toks_t[-1]]
+                    if len(near) == 1:
+                        if not run_n:
+                            print(f"      (using the timing stored for "
+                                  f"\"{near[0]}\" - same combo)")
+                        text = near[0]
+                        dts_t = cc_dt[text]
+                    elif len(parse_combo(text)) > 1 and not run_n:
+                        print(f"      (no timing stored for this string - every "
+                              f"input goes out as soon as the last one is seen)")
+                steps = parse_combo(text)
                 print(f"  {text}" + (f"  (run {run_n + 1})" if args.test_repeat > 1 else ""))
                 hp0 = foe.get("CurrentHealth")
                 prev_tok = None
