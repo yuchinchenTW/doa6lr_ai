@@ -157,11 +157,13 @@ RECIPE_POOL = {
     # takes the leading numpad digits and PK is the P+K button.
     # Her calibration (commands.json, chars/35) settles which inputs are real:
     # 8P 190, 8K 191, 2P+K 8108, 6P 177, K 179, 4P 8071, 6K 8087 all distinct,
-    # and 214P 8130 (cmd 5900) is the Combo Challenge stage-1 move. 3K and 3P
+    # and 236P 8130 (cmd 5900) is the Combo Challenge stage-1 move and her
+    # only motion input: 46P/46K/46PK/64PK/214P all fall back to their last
+    # direction + button. 3K and 3P
     # collapse to 6K / 6P and 1P/7P to 4P, so the diagonals are not worth a
     # pool slot - 3KK is dropped for 6KK.
     35: {"default": ["8K,P,P,P,P", "8P,P,P,P,P", "2PK,6K,K", "6P,P,P",
-                     "P,K,K", "K,P", "4P,K", "6K,K", "66P", "214P",
+                     "P,K,K", "K,P", "4P,K", "6K,K", "66P", "236P",
                      "S,S,S,S", "S", "P"],
          176:       ["P,K,K", "P,P,P,P", "6P,P", "S,S,S,S", "P", "S"],
          "lowkick":  ["P", "6P,P", "S"]},
