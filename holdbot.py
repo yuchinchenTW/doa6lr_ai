@@ -1039,6 +1039,8 @@ def main():
     def combo_reset(why):
         if combo["hp0"] is not None:
             dealt = max(0, combo["hp0"] - foe.get("CurrentHealth"))
+            if dealt > 300:
+                dealt = 0               # a stale object read (25 "combos" at 143)
             combo_stats["dmg"] += dealt
             combo_stats["by_len"].setdefault(combo["hits"], [0, 0])
             combo_stats["by_len"][combo["hits"]][0] += 1
@@ -2374,9 +2376,14 @@ def main():
                             and now - combo["t"] > 0.04 and d_c <= args.combo_range:
                         # not taken yet: the buffer window is the tail of the
                         # recovery, so keep re-pressing every ~2 frames until
-                        # our move id changes; give up after 5
-                        if combo.get("again", 0) >= 5:
-                            combo_reset(f"{combo.get('tok', '?')} not accepted 6x")
+                        # our move id changes. Give up by TIME, not count: a
+                        # launcher's recovery (8K, 8144) outlasted 6 presses
+                        # and the juggle 6P was abandoned before we were even
+                        # idle - 0.5 s after we are idle, or 1.2 s in all
+                        t_first = combo.get("t_first") or combo["t"]
+                        if (now - t_first > 1.2) or (my_idle and now - t_first > 0.5):
+                            combo_reset(f"{combo.get('tok', '?')} not accepted "
+                                        f"({combo.get('again', 0) + 1}x, {now - t_first:.2f}s)")
                         else:
                             combo["again"] = combo.get("again", 0) + 1
                             combo["i"] -= 1
@@ -2405,6 +2412,8 @@ def main():
                         combo["i"] += 1
                         combo["last_mv"] = my_mv_tick
                         combo["t"] = now
+                        if not repress:
+                            combo["t_first"] = now
                         combo["await_"] = True
                         combo["tok"] = tok
                         if not repress:
@@ -2412,14 +2421,15 @@ def main():
                             combo_stats["hits"] += 1
                         last_fire = now
                         last_action[:] = ["combo", now]
-                        print(f"  +    combo {combo['i']}/{len(cseq)}: {tok:<3} "
-                              f"(opener {combo['opener']}, foe kind {kind}, our move "
-                              f"{my_mv_tick} phase {me.get('Phase')}, dist {d_c:.0f})"
-                              f"{'  (again)' if repress else ''}")
+                        if not repress or combo.get("again", 0) in (1, 5, 10, 20):
+                            print(f"  +    combo {combo['i']}/{len(cseq)}: {tok:<3} "
+                                  f"(opener {combo['opener']}, foe kind {kind}, our move "
+                                  f"{my_mv_tick} phase {me.get('Phase')}, dist {d_c:.0f})"
+                                  f"{'  (again x' + str(combo['again']) + ')' if repress else ''}")
             # ---- throws are not all alike (manual: T grabs standing, 2T
             # grabs crouching, only T can be escaped - press T the moment
             # they grab). Learn each throw's CommandCode / height once.
-            if kind == MK_THROW:
+            if kind == MK_THROW and mv < 40000 and foe.get("CommandCode") < 10000:
                 cmd_now, hml_now = foe.get("CommandCode"), foe.get("HighMidLowGround")
                 if cmd_now and (mv not in throw_cmd or not throw_cmd[mv][0]):
                     throw_cmd[mv] = (cmd_now, hml_now)
