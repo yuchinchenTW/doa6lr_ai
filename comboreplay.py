@@ -634,14 +634,18 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
               + ("  HIT" if landed else "")
               + ("" if ok else "  (unknown code, nothing pressed)")
               + ("  OK" if hit else ""))
+        # Only when this step actually missed. A long animation often spills
+        # its later ids into the NEXT step's window (the Fatal Rush's 8257 was
+        # followed by 8258 under the next press), and warning there was a
+        # false alarm on a step that matched.
         want_chain = [m for m in (s.get("chain") or []) if m not in NEUTRAL_IDS]
         got_chain = [m for m in ids if m not in NEUTRAL_IDS]
-        if len(want_chain) > 1 and len(got_chain) < len(want_chain):
+        if not hit and len(want_chain) > 1 and len(got_chain) < len(want_chain):
             print(f"      the demo ran {'>'.join(map(str, want_chain))}, ours stopped "
                   f"at {'>'.join(map(str, got_chain)) or 'nothing'}"
                   + (f" (dist {d_now:.0f} vs the demo's {s.get('dist')})"
                      if d_now is not None and s.get("dist") else "")
-                  + " - the throw grabbed air, or a later part needs its own input")
+                  + " - it ran short: out of range, or a later part needs its own input")
     hits = sum(1 for _, w, g in results if w is not None and w in g)
     print(f"  {hits}/{len(results)} moves matched the demonstration")
     # A stage the replay clears is a combo the GAME itself teaches. Save the
