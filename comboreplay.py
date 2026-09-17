@@ -51,6 +51,7 @@ NUMPAD = {1: (-1, -1), 2: (0, -1), 3: (1, -1), 4: (-1, 0), 5: (0, 0),
 IDLE_MOVES = (0, 1, 2, 3, 4)
 CC_FILE = "combo_challenge.json"   # {char: ["HK,P,P,P,P", ...]} cleared stages
 NEUTRAL_IDS = set()   # animation ids this character shows while MoveKind is 0
+HELD_FWD = []         # forward left down by close_in so the next move carries it
 CHAR_TABLE = [False]  # this character's own calibration is loaded
 DOWNED = tuple(range(70, 100)) + tuple(range(125, 140))   # lying down / getting up
 
@@ -462,7 +463,7 @@ def press(inj, tok_cmd, facing_right, hold=0.045, tok=None):
 MOVE_CMDS = {9: "66", 4: "44"}      # dashes seen in a demo (moves 3 / 5)
 
 
-def close_in(me, foe, inj, facing_right, want, timeout=2.5):
+def close_in(me, foe, inj, facing_right, want, timeout=2.5, keep=False):
     """Walk forward until we are as close as the demo was (+10) for this
     input. The dummy is a post that never moves; the demo dashed in before
     the close-range tasks and our replay stood where it was, so half the
@@ -498,8 +499,17 @@ def close_in(me, foe, inj, facing_right, want, timeout=2.5):
         if d is not None and d <= want + 3:
             break
         time.sleep(0.005)
-    inj.up(fwd)
-    time.sleep(0.1)                              # neutral, or the button reads 6P
+    if keep:
+        # The demo pressed WHILE still walking in, and a move thrown out of a
+        # forward walk travels with it. Letting go and standing still for a
+        # tenth of a second first cost exactly that ground, and the 6P at the
+        # end of stage 6 fell short. Forward stays down; the caller's press
+        # releases it.
+        HELD_FWD[:] = fwd
+    else:
+        HELD_FWD.clear()
+        inj.up(fwd)
+        time.sleep(0.1)                          # neutral, or the button reads 6P
     if d is not None and d > want + 3:
         print(f"      (closing in stopped at {d:.0f}, wanted {want}: "
               f"{'walked the wrong way, flipped' if flipped else 'the walk gained nothing - touching the post?'})")
@@ -579,11 +589,19 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                     time.sleep(0.001)
         d_now = None
         if from_idle and foe is not None:
+            # the demo was walking when it pressed: keep walking into the move
+            keep_fwd = s["prev_mv"] in (1, 3, 5, 6)
             d_now = close_in(me, foe, inj, facing_right, s.get("dist"),
-                             timeout=2.5 if i == 0 else max(0.4, (s.get("dt") or 0.5)))
+                             timeout=2.5 if i == 0 else max(0.4, (s.get("dt") or 0.5)),
+                             keep=keep_fwd)
         cmd = s["cmd"]
         used = None
         t_prev_press = time.perf_counter()
+        if HELD_FWD:
+            hf = list(HELD_FWD)
+            HELD_FWD.clear()
+        else:
+            hf = []
         if decode(cmd) is not None:
             ok = press(inj, cmd, facing_right)
             used = token(cmd)
@@ -623,6 +641,8 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                 ok = press(inj, cmd, facing_right, tok=used)
             else:
                 ok = False
+        if hf:
+            inj.up(hf)
         ids = []
         prev = steps[i - 1]["mv"] if i else None
         t1 = time.perf_counter()
