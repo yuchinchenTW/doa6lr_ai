@@ -646,6 +646,11 @@ def main():
                 best = (d, a)
         return best[1] if best else None
 
+    # the two fighters are never further apart than this in a real round
+    # (the widest ever logged is ~400 at a round start); 778 came from a
+    # bone array that had been saved into pos.json
+    POS_MAX_D = 450.0
+
     def find_positions_in_objects(window=0.3):
         """Both coordinates from the two character objects, by motion. In the
         roommate's mode the shared position object was frozen for BOTH sides
@@ -709,6 +714,14 @@ def main():
                               # mixed pair (+0xD0 / +0xD4740) was a bone array
                               # that happened to move while the row was still
         pairs.sort(key=rank)  # unfilled. Better no fix now than a wrong one
+        # +0xC0/+0xD0 is the root transform and has held for every character
+        # so far. A bone array ~1 MB in also moves and also passes "world
+        # sized", and once it was written to pos.json a whole session read
+        # distances of 300-780: no throw was ever answered (they are skipped
+        # past 300) and the bot was thrown to death. If anything small is on
+        # offer, nothing else is considered.
+        if any(t[1] < 0x1000 for t in pairs):
+            pairs = [t for t in pairs if t[1] < 0x1000]
         for _, my_off, foe_off in pairs[:8]:
             ok = True
             prev = None
@@ -723,7 +736,7 @@ def main():
                     ok = False
                     break
                 d = ((m[0] - f[0]) ** 2 + (m[2] - f[2]) ** 2) ** 0.5
-                if d > 1500 or abs(m[1] - f[1]) > 1500:
+                if d > POS_MAX_D or abs(m[1] - f[1]) > 600:
                     ok = False
                     break
                 if prev is not None and (abs(m[0] - prev[0][0]) > 400 or abs(m[2] - prev[0][2]) > 400
@@ -767,7 +780,7 @@ def main():
                 if not all(100 < abs(v) < 3e5 for v in (m[0], m[2], f[0], f[2])):
                     return False
                 d = ((m[0] - f[0]) ** 2 + (m[2] - f[2]) ** 2) ** 0.5
-                if not 5 < d < 800 or abs(m[1] - f[1]) > 600:
+                if not 5 < d < POS_MAX_D or abs(m[1] - f[1]) > 600:
                     return False
                 time.sleep(0.05)
         except Exception:
@@ -788,12 +801,17 @@ def main():
         if got is not None:
             my_addr, foe_addr, my_off, foe_off = got
             me.pos, foe.pos = my_addr, foe_addr
+            keep = pos_mem[0] is not None and pos_mem[0] < 0x1000 and my_off >= 0x1000
             pos_mem[:] = [my_off, foe_off]
-            try:
-                with open(POS_FILE, "w", encoding="utf-8") as fh:
-                    json.dump({"me": my_off, "foe": foe_off}, fh)
-            except OSError:
-                pass
+            if keep:
+                print(f"  position: using +0x{my_off:X} for now but NOT saving it over "
+                      f"the remembered root transform")
+            else:
+                try:
+                    with open(POS_FILE, "w", encoding="utf-8") as fh:
+                        json.dump({"me": my_off, "foe": foe_off}, fh)
+                except OSError:
+                    pass
             d0 = ((me.xyz()[0] - foe.xyz()[0]) ** 2 + (me.xyz()[2] - foe.xyz()[2]) ** 2) ** 0.5
             print(f"position: from the character objects by motion - ours +0x{my_off:X}, "
                   f"theirs +0x{foe_off:X}, distance now {d0:.0f}")
@@ -1246,6 +1264,8 @@ def main():
     pos_zero = [time.perf_counter()]    # last time the distance was > 8
     pos_last = [0.0, time.perf_counter()]   # last distinct distance, when
 
+    pos_suspect = [0.0]     # last time the distance read like nonsense
+
     def distance():
         """Range and which way we face, from the two positions.
 
@@ -1275,7 +1295,9 @@ def main():
         stuck = time.perf_counter() - pos_zero[0] > 3.0 or frozen
         if frozen:
             pos_last[1] = time.perf_counter()
-        if (d > 800 or d != d or stuck) and time.perf_counter() - pos_warn[0] > 5.0 \
+        if d > POS_MAX_D or d != d:
+            pos_suspect[0] = time.perf_counter()
+        if (d > POS_MAX_D or d != d or stuck) and time.perf_counter() - pos_warn[0] > 5.0 \
                 and me.get("CurrentHealth") > 0 and foe.get("CurrentHealth") > 0:
             if stuck:
                 pos_zero[0] = time.perf_counter()
@@ -1296,7 +1318,7 @@ def main():
         # count, so the vector is only compared across such an event: frozen
         # when it starts, checked when both are back on their feet. 303 of
         # 423 holds in one survival run went in with a stale facing.
-        if pos_ok[0] and 40 < d < 800:
+        if pos_ok[0] and 40 < d < POS_MAX_D:
             ux, uz = (fx - mx) / d, (fz - mz) / d
             mm, fm = me.get("CurrentMove"), foe.get("CurrentMove")
             in_event = (me.get("MoveType") in (MT_THROWN, MT_HOLD_HIT)
@@ -3007,8 +3029,14 @@ def main():
             skipped_note[0] = None
 
             if incoming_throw and not incoming_strike:
-                if dist >= args.throw_punish_range or args.throw_answer == "none":
-                    time.sleep(period)      # out of range: nothing to answer
+                if args.throw_answer == "none" or (
+                        dist >= args.throw_punish_range
+                        and now - pos_suspect[0] > 5.0):
+                    # out of range: nothing to answer. Only trust that while
+                    # the distance itself is trustworthy - with a bad position
+                    # row every throw reads as out of range and goes
+                    # unanswered, which is how a 22-0 run ended
+                    time.sleep(period)
                     continue
                 if far_whiff.get(mv, 0) >= 3 and dist >= 140:
                     # char 28's 8183 was started from 175-185 sixty times in a
