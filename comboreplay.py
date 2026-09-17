@@ -743,7 +743,11 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         # once a follow-up's timing is known, one press (plus one spare):
         # re-pressing P in the stance queued a second P, and the K that
         # followed came out as P,P (8264) instead of the stance kick
-        max_again = 1 if tries.get(("t", cmd, s["mv"])) is not None else 10
+        # A learned timing means one press at the right moment is enough ONCE
+        # the move comes out; while nothing has come out at all, keep trying.
+        # Capping at 1 here made the 8P after the 66P vanish entirely, where
+        # two re-presses had been landing it.
+        max_again = 4 if tries.get(("t", cmd, s["mv"])) is not None else 10
         landed = False
         while time.perf_counter() - t1 < limit:
             me.refresh()
@@ -765,9 +769,10 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                     break
             elif ids:
                 break
-            elif (not from_idle and neutral(me)
+            elif (not from_idle and neutral(me) and again >= max_again
                   and time.perf_counter() - t1 > 0.2):
-                break                        # the previous move ended: follow-up missed
+                break                        # the previous move ended and the
+                                             # re-presses are spent: it missed
             elif (ok and used and not from_idle and again < max_again
                   and mv != prev
                   and not (i + 1 < len(steps) and steps[i + 1].get("stance_before"))
