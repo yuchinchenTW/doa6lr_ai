@@ -753,7 +753,12 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                 if foe.get("MoveType") == 3 or 24000 <= fm < 27000 or 16000 <= fm < 16100:
                     landed = True                # hit (or blocked) reaction on the post
             mv = me.get("CurrentMove")
-            if mv not in IDLE_MOVES and mv != prev:
+            # "not in 0..4" is not "a move of ours came out". Minato dances on
+            # the spot with ids like 8025, so her idle registered as the
+            # produced move: the 8P that never came out was recorded as done,
+            # nothing was re-pressed, and the stance that followed was entered
+            # from the wrong string. MoveKind 0 is the test.
+            if not neutral(me) and mv != prev:
                 if not ids or ids[-1] != mv:
                     ids.append(int(mv))
                 if s["mv"] in ids and i + 1 < len(steps):
