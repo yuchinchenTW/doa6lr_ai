@@ -1267,7 +1267,12 @@ def main():
             # the vertical goes down WITH the button (down alone a frame ahead
             # is a sidestep: 2T came out as id 32)
             inj.down(vert + [btn])
-        time.sleep(args.press)
+        # A string follow-up needs a longer press than a single move does.
+        # holdbot held a button for --press (0.020 s, 1.2 frames at 60 fps) and
+        # the second P of HK,PPPP vanished while comboreplay, holding 0.045 s,
+        # landed every one. The buffer window inside a string is stricter than
+        # the one from neutral.
+        time.sleep(max(args.press, 0.045))
         inj.up([btn])
         if names:
             inj.up(names)
