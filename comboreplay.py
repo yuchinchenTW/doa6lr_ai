@@ -851,14 +851,22 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         # 0.72 s and its follow-up P is pressed after that, while a string
         # branch comes 0.19 s in. Without the timing holdbot presses as soon as
         # the previous move appears and the input is eaten.
-        seq, dts = [], []
+        seq, dts, carry = [], [], 0.0
         for st_i, tk in zip(steps, step_tokens):
             if st_i.get("stance_before"):
                 seq.append(STANCE_TOKEN)
                 dts.append(0.0)
             if tk:
                 seq.append(tk)
-                dts.append(round(st_i.get("dt") or 0.0, 3))
+                dts.append(round((st_i.get("dt") or 0.0) + carry, 3))
+                carry = 0.0
+            else:
+                # a skipped step (the demo walking in) still took time, and
+                # the next input's gap is measured from IT. Dropping that time
+                # fired 3K,K,66P's dash 0.16 s after the previous hit instead
+                # of 0.96 s, while the character was still in recovery - no
+                # dash starts there, so 66P came out as a plain 6P.
+                carry += st_i.get("dt") or 0.0
         # Everything is saved, throws included: holdbot skips a throw-led
         # sequence when picking a combo recipe (a character in hit stun cannot
         # be grabbed) and uses the longest one where it has decided to throw
