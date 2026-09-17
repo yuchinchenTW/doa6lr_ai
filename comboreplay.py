@@ -38,7 +38,7 @@ from memlib import Process, find_pid
 from pad import KeyboardInjector, dirs_to_names
 
 u32 = ctypes.WinDLL("user32", use_last_error=True)
-VK = {"F5": 0x74, "F7": 0x76, "F8": 0x77, "F10": 0x79}
+VK = {"F5": 0x74, "F7": 0x76, "F8": 0x77, "F9": 0x78, "F10": 0x79}
 
 # P 1000 / K 1100 seen in matches; 5700 is P+K (a Combo Challenge demo of
 # 8P+K read cmd 5780 and produced move 8428 - the 84xx ids are the P+K
@@ -576,7 +576,8 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         else:
             cands = candidates(cmd, s["mv"], s.get("in_throw", False))
             prev_tok = step_tokens[-1] if step_tokens else None
-            if prev_tok and i and cmd == steps[i - 1]["cmd"] + 1:
+            if (prev_tok and i and cmd == steps[i - 1]["cmd"] + 1
+                    and tries.get((cmd, s["mv"]), 0) == 0):
                 cands = [prev_tok] + [c for c in cands if c != prev_tok]
             if s.get("in_throw") and tries.get("_throw_tok"):
                 # part 2 of Minato's 214T was 214T again: a multi-part throw
@@ -718,7 +719,9 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         cands = candidates(cmd_m, mv_m)
         if cands:
             nxt = cands[tries.get((cmd_m, mv_m), 0) % len(cands)]
-            print(f"      {nm}: {used_m} was wrong - press F8 again to try {nxt}")
+            print(f"      {nm}: {used_m} was wrong - next is {nxt} "
+                  f"(F8 once, or F9 to run through them)")
+    return hits, len(results)
     if learned:
         table = read_commands()
         char = me.get("CurrentCharacter")
@@ -1011,13 +1014,34 @@ def main():
         steps = plan(events)
         tries = {}
         print("\nrecorded: " + "  ".join(f"{s['tok']}->{s['mv']}@{s['prev_fr']}" for s in steps))
-        print("F8 replay   F5 record again   F7 save   F10 quit")
+        menu = ("F8 replay   F9 keep retrying until it matches   "
+                "F5 record again   F7 save   F10 quit")
+        print(menu)
         while True:
             keys = hot.pressed()
             if "F10" in keys:
                 inj.release_all(); return
             if "F5" in keys:
                 break
+            if "F9" in keys:
+                # Each replay advances one candidate per unknown code, so a
+                # stage with two unknowns needs a dozen presses of F8. Do them.
+                foe_s = [o for o in sides.values() if o is not me][0]
+                for round_n in range(1, 41):
+                    print(f"  --- auto try {round_n} ---")
+                    got, want = replay(me, steps, inj, facing_right,
+                                       args.lag_frames, tries, foe=foe_s)
+                    if got == want:
+                        print(f"  solved in {round_n} tries")
+                        break
+                    if "F10" in hot.pressed():
+                        print("  stopped")
+                        break
+                    time.sleep(0.4)
+                else:
+                    print("  gave up after 40 tries - the code may need a "
+                          "stance or a state the replay cannot reach")
+                print(menu)
             if "F7" in keys:
                 with open("demo.json", "w", encoding="utf-8") as fh:
                     json.dump({"events": events, "steps": steps}, fh, indent=1)
@@ -1025,7 +1049,7 @@ def main():
             if "F8" in keys:
                 replay(me, steps, inj, facing_right, args.lag_frames, tries,
                        foe=[o for o in sides.values() if o is not me][0])
-                print("F8 replay   F5 record again   F7 save   F10 quit")
+                print(menu)
             time.sleep(0.01)
 
 
