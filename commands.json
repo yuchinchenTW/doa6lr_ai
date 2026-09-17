@@ -965,7 +965,8 @@
     "cmd": 400,
     "move": 8137,
     "ids": [
-     8137
+     8137,
+     170
     ]
    },
    "6P": {
@@ -1114,7 +1115,7 @@
     "ids": [
      177
     ],
-    "stale": "measured before the down-diagonal fix - recalibrate"
+    "stale": "the calibration recipe dropped the down half - recalibrate"
    },
    "3K": {
     "cmd": 1320,
@@ -1130,7 +1131,7 @@
     "ids": [
      8103
     ],
-    "stale": "measured before the down-diagonal fix - recalibrate"
+    "stale": "the calibration recipe dropped the down half - recalibrate"
    },
    "3HK": {
     "cmd": 1450,
@@ -1138,7 +1139,7 @@
     "ids": [
      8114
     ],
-    "stale": "measured before the down-diagonal fix - recalibrate"
+    "stale": "the calibration recipe dropped the down half - recalibrate"
    },
    "3S": {
     "cmd": 5500,
@@ -1188,7 +1189,7 @@
     "ids": [
      8071
     ],
-    "stale": "measured before the down-diagonal fix - recalibrate"
+    "stale": "the calibration recipe dropped the down half - recalibrate"
    },
    "1K": {
     "cmd": 1300,
@@ -1196,7 +1197,7 @@
     "ids": [
      8091
     ],
-    "stale": "measured before the down-diagonal fix - recalibrate"
+    "stale": "the calibration recipe dropped the down half - recalibrate"
    },
    "1PK": {
     "cmd": 1950,
@@ -1204,7 +1205,7 @@
     "ids": [
      8035
     ],
-    "stale": "measured before the down-diagonal fix - recalibrate"
+    "stale": "the calibration recipe dropped the down half - recalibrate"
    },
    "1HK": {
     "cmd": 1440,
@@ -1212,7 +1213,7 @@
     "ids": [
      8113
     ],
-    "stale": "measured before the down-diagonal fix - recalibrate"
+    "stale": "the calibration recipe dropped the down half - recalibrate"
    },
    "1S": {
     "cmd": 5500,
@@ -1227,15 +1228,15 @@
     "ids": [
      8071
     ],
-    "stale": "measured before the down-diagonal fix - recalibrate"
+    "stale": "the calibration recipe dropped the down half - recalibrate"
    },
    "7K": {
-    "cmd": 1270,
-    "move": 193,
+    "cmd": 1300,
+    "move": 8091,
     "ids": [
-     193
+     8091
     ],
-    "stale": "measured before the down-diagonal fix - recalibrate"
+    "stale": "the calibration recipe dropped the down half - recalibrate"
    },
    "7PK": {
     "cmd": 1950,
@@ -1243,7 +1244,7 @@
     "ids": [
      8035
     ],
-    "stale": "measured before the down-diagonal fix - recalibrate"
+    "stale": "the calibration recipe dropped the down half - recalibrate"
    },
    "7HK": {
     "cmd": 1440,
@@ -1251,7 +1252,7 @@
     "ids": [
      8113
     ],
-    "stale": "measured before the down-diagonal fix - recalibrate"
+    "stale": "the calibration recipe dropped the down half - recalibrate"
    },
    "7S": {
     "cmd": 5500,
@@ -1264,7 +1265,8 @@
     "cmd": 401,
     "move": 8138,
     "ids": [
-     8138
+     8138,
+     8148
     ]
    },
    "4T": {
@@ -1426,15 +1428,15 @@
     "cmd": 401,
     "move": 8138,
     "ids": [
-     8138
+     8138,
+     8146
     ]
    },
    "9T": {
     "cmd": 401,
     "move": 8138,
     "ids": [
-     8138,
-     8146
+     8138
     ]
    },
    "1T": {
@@ -1462,8 +1464,7 @@
     "cmd": 403,
     "move": 8141,
     "ids": [
-     8141,
-     8156
+     8141
     ]
    },
    "_learned": {
@@ -1489,6 +1490,111 @@
     "move": 8077,
     "ids": [
      8077
+    ]
+   },
+   "H": {
+    "cmd": null,
+    "move": null,
+    "ids": []
+   },
+   "4H": {
+    "cmd": 426,
+    "move": 154,
+    "ids": [
+     154
+    ]
+   },
+   "6H": {
+    "cmd": 426,
+    "move": 155,
+    "ids": [
+     155
+    ]
+   },
+   "2H": {
+    "cmd": null,
+    "move": null,
+    "ids": []
+   },
+   "8H": {
+    "cmd": null,
+    "move": null,
+    "ids": []
+   },
+   "7H": {
+    "cmd": 425,
+    "move": 152,
+    "ids": [
+     152
+    ]
+   },
+   "1H": {
+    "cmd": 427,
+    "move": 156,
+    "ids": [
+     156
+    ]
+   },
+   "3H": {
+    "cmd": null,
+    "move": null,
+    "ids": []
+   },
+   "9H": {
+    "cmd": null,
+    "move": null,
+    "ids": []
+   },
+   "236T": {
+    "cmd": 401,
+    "move": 8138,
+    "ids": [
+     8138,
+     8148
+    ]
+   },
+   "46T": {
+    "cmd": 401,
+    "move": 8138,
+    "ids": [
+     8138,
+     8148
+    ]
+   },
+   "64T": {
+    "cmd": 402,
+    "move": 8140,
+    "ids": [
+     8140
+    ]
+   },
+   "66T": {
+    "cmd": 402,
+    "move": 8139,
+    "ids": [
+     8139
+    ]
+   },
+   "44T": {
+    "cmd": 402,
+    "move": 8140,
+    "ids": [
+     8140
+    ]
+   },
+   "33T": {
+    "cmd": 401,
+    "move": 8138,
+    "ids": [
+     8138,
+     8146
+    ]
+   },
+   "22T": {
+    "cmd": 404,
+    "move": 8142,
+    "ids": [
+     8142
     ]
    }
   }

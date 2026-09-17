@@ -939,9 +939,18 @@ def calibrate(sides, inj, facing_right, hot):
             dx = -dx
         horiz, vert = dirs_to_names(dx, 0), dirs_to_names(0, dy)
         key = BUTTON_KEY[btn]
-        if horiz:
-            inj.down(horiz); time.sleep(0.35 if held else 0.017)
-        inj.down(vert + [key])
+        if horiz and vert and dy < 0 and not held:
+            # the same down-diagonal recipe press() uses: both directions in
+            # place BEFORE the button, or the game keeps only the horizontal
+            # and 3K is recorded as 6K (which is how the corrected 3K entry
+            # got overwritten by a later calibration)
+            inj.down(horiz + vert)
+            time.sleep(0.05)
+            inj.down([key])
+        else:
+            if horiz:
+                inj.down(horiz); time.sleep(0.35 if held else 0.017)
+            inj.down(vert + [key])
         # Sample from the frame the button goes DOWN, not after the release.
         # The held variants hold the button for a second and the direction for
         # a third: waiting for the release meant the move had already played
