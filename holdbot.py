@@ -2890,13 +2890,19 @@ def main():
                 answer = args.throw_answer
                 t_cmd, t_hml = throw_cmd.get(mv, (None, None))
                 t_cls = throw_class(t_cmd, t_hml)
-                if (answer == "crouch" and t_cls in ("low", "T")
-                        and wait_failed.get(mv, 0) < 2):
+                if answer == "crouch" and t_cls in ("low", "T"):
                     # 2T grabs crouchers only and we stand; the plain T we
                     # escape by pressing T as it grabs (4/4). Stay put, and
                     # punish the whiff. Unless this one's break keeps
-                    # failing (8181 -> 8252, cmd 111, 0/3): then duck/back/side
-                    answer = "wait"
+                    # failing (8181 -> 8252, cmd 111, 0/3): then duck/back/side.
+                    # Scored and saved like the other answers: char 4's 8202
+                    # starts as the T throw (cmd 363) and turns into 8245
+                    # (cmd 386, unbreakable) - the in-session counter paid
+                    # for that lesson again every run (42-1, 54-1, 57-1)
+                    answer = pick_answer(fchar, mv, "wait",
+                                         options=("wait", "duck", "back", "side", "lowkick"))
+                    if answer == "wait" and wait_failed.get(mv, 0) >= 2:
+                        answer = pick_answer(fchar, mv, "duck")
                 elif answer == "crouch":
                     jab_need = max(args.throw_jab_frames,
                                    CHAR_P_STARTUP.get(my_char, 12)
@@ -2922,7 +2928,7 @@ def main():
                         answer = pick_answer(fchar, mv, "lowkick" if fast else "duck")
                     else:
                         answer = pick_answer(fchar, mv, "back")
-                if answer in ("back", "side", "duck", "lowkick", "hopkick"):
+                if answer in ("back", "side", "duck", "lowkick", "hopkick", "wait"):
                     if not close_throw["done"]:
                         close_throw["done"] = True  # our T was cut short by this
                                                     # answer: neither a hit nor a miss
