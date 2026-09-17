@@ -49,6 +49,7 @@ BUTTON_KEY = {"P": "punch", "K": "kick", "PK": "pk", "HK": "hk", "S": "special",
 NUMPAD = {1: (-1, -1), 2: (0, -1), 3: (1, -1), 4: (-1, 0), 5: (0, 0),
           6: (1, 0), 7: (-1, 1), 8: (0, 1), 9: (1, 1)}
 IDLE_MOVES = (0, 1, 2, 3, 4)
+CC_FILE = "combo_challenge.json"   # {char: ["HK,P,P,P,P", ...]} cleared stages
 NEUTRAL_IDS = set()   # animation ids this character shows while MoveKind is 0
 DOWNED = tuple(range(70, 100)) + tuple(range(125, 140))   # lying down / getting up
 
@@ -466,7 +467,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
     tries = tries if tries is not None else {}
     print(f"replaying {len(steps)} input(s): " + " ".join(s["tok"] for s in steps))
     me.refresh()
-    results, learned, misses = [], {}, []
+    results, learned, misses, step_tokens = [], {}, [], []
     t_prev_press = time.perf_counter()
     for i, s in enumerate(steps):
         from_idle = s["prev_mv"] in IDLE_MOVES and not s.get("in_throw")
@@ -624,6 +625,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         if not hit and used and decode(cmd) is None:
             misses.append((s["tok"], cmd, s["mv"], used))
         results.append((s["tok"], s["mv"], ids))
+        step_tokens.append(token(cmd) if decode(cmd) is not None else used)
         print(f"  {i + 1:>2}. {s['tok']:<10} wanted move {s['mv']}  got "
               f"{'>'.join(map(str, ids)) if ids else None}"
               + (f"  tried {used}" if decode(cmd) is None and used else "")
@@ -642,6 +644,34 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                   + " - the throw grabbed air, or a later part needs its own input")
     hits = sum(1 for _, w, g in results if w is not None and w in g)
     print(f"  {hits}/{len(results)} moves matched the demonstration")
+    # A stage the replay clears is a combo the GAME itself teaches. Save the
+    # token sequence so holdbot can try it in a match: its bandit scores it by
+    # net damage against everything else in the character's pool.
+    if hits and hits == len(results) and len(results) > 1:
+        seq = []
+        for st, tk in zip(steps, step_tokens):
+            if st["cmd"] in MOVE_CMDS or tk is None:
+                continue
+            seq.append(tk)
+        # a strike string is what holdbot presses after an opener connects; a
+        # throw cannot be used there (you cannot grab a character in hit stun)
+        if len(seq) > 1 and not seq[0].endswith("T"):
+            text = ",".join(seq)
+            ch = me.get("CurrentCharacter")
+            try:
+                with open(CC_FILE, encoding="utf-8") as fh:
+                    cc = json.load(fh)
+            except (OSError, ValueError):
+                cc = {}
+            lst = cc.setdefault(str(ch), [])
+            if text not in lst:
+                lst.append(text)
+                with open(CC_FILE, "w", encoding="utf-8") as fh:
+                    json.dump(cc, fh, indent=1, sort_keys=True)
+                print(f"  saved \"{text}\" to {CC_FILE} - holdbot will try it "
+                      f"for character {ch}")
+            else:
+                print(f"  \"{text}\" is already in {CC_FILE}")
     for nm, cmd_m, mv_m, used_m in misses:
         cands = candidates(cmd_m, mv_m)
         if cands:

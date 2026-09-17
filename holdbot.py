@@ -1026,11 +1026,24 @@ def main():
         combo_bank = {}
     recipe_cache = {}
 
+    def cc_extra(char):
+        """Combos the game's own Combo Challenge taught, cleared by
+        comboreplay and written to combo_challenge.json. They join the
+        character's "default" pool and the net-damage bandit prices them
+        against everything else."""
+        try:
+            with open("combo_challenge.json", encoding="utf-8") as fh:
+                return [t for t in json.load(fh).get(str(char), []) if t]
+        except (OSError, ValueError):
+            return []
+
     def choose_recipe(key):
         """Round-robin until every candidate has 3 tries, then the best mean
         damage, with one try in seven spent on the runner-up so a lucky
         early sample cannot lock a weaker string in."""
         pool = RECIPE_POOL.get(my_char, GENERIC_POOL).get(key) if combo_auto else None
+        if pool is not None and key == "default":
+            pool = pool + [t for t in cc_extra(my_char) if t not in pool]
         if not pool:
             return None, None
         stats = combo_bank.setdefault(str(my_char), {}).setdefault(str(key), {})
