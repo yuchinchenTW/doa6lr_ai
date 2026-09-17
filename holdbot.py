@@ -1132,6 +1132,7 @@ def main():
 
     def combo_press(step):
         (dx, dy), btn, tok, motion = (step + ([],))[:4]
+        dash = bool(motion) and motion[-1] == ((dx, dy))
         for mdx, mdy in motion:                      # 236P: tap 2, tap 3, then 6+P
             mn = dirs_to_names(mdx if facing_state[0] else -mdx, mdy)
             inj.down(mn); time.sleep(0.033); inj.up(mn); time.sleep(0.017)
@@ -1143,7 +1144,15 @@ def main():
             if quiet < 0.10:                           # let the 4/6 buffer expire
                 time.sleep(0.10 - quiet)
         horiz, vert = dirs_to_names(sdx, 0), dirs_to_names(0, dy)
-        if horiz and vert and dy < 0:
+        if dash and horiz:
+            # 66P is a RUN and then a punch, and the run is most of its range.
+            # Tapping forward and pressing 17 ms later produced the right move
+            # a step from where it started (the Combo Challenge's 66P fell
+            # short of the post until the run-up was held for ~0.14 s).
+            inj.down(horiz)
+            time.sleep(0.13)
+            inj.down(vert + [btn])
+        elif horiz and vert and dy < 0:
             # A DOWN diagonal needs both directions in place before the
             # button. Sent alongside it the game kept only the horizontal:
             # Minato's 3K came out as 6K and 1P/7P as 4P, while the UP
