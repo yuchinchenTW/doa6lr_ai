@@ -1615,9 +1615,10 @@ def main():
         expect = {k: v.get("move") for k, v in _sec.items()
                   if isinstance(v, dict) and v.get("move")}
 
+        known = cc_all(my_char)        # also fills cc_dt with the timings
         if args.test_combo == "all":
             strings = list(RECIPE_POOL.get(my_char, GENERIC_POOL).get("default") or [])
-            for t, _w in cc_all(my_char):
+            for t, _w in known:
                 if t not in strings:
                     strings.append(t)
         else:
@@ -1644,7 +1645,9 @@ def main():
                 for n_st, st in enumerate(steps):
                     tok = st[2]
                     if n_st and n_st < len(dts_t) and dts_t[n_st] > 0.05:
-                        wait_t = dts_t[n_st] * 0.8 - (time.perf_counter() - t_step)
+                        # the whole gap, less the input lag: H+K runs to 0.716 s
+                        # and 80% of its 0.735 s gap still landed inside it
+                        wait_t = dts_t[n_st] - 0.03 - (time.perf_counter() - t_step)
                         if wait_t > 0:
                             time.sleep(wait_t)
                     before = me.get("CurrentMove")
@@ -2955,7 +2958,7 @@ def main():
                         # pressing as soon as the move appears loses the input
                         dts = cc_dt.get(combo.get("recipe"))
                         if dts and combo["i"] < len(dts):
-                            need = dts[combo["i"]] * 0.8
+                            need = dts[combo["i"]] - 0.05
                             if need > 0.05 and now - combo["t"] < need:
                                 do_press = False
                     elif (my_type_now in (MT_HIT, MT_THROWN, MT_HOLD_HIT, 7)
