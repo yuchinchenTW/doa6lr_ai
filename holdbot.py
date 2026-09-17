@@ -73,7 +73,8 @@ LOW_THROW_CMDS = ()              # the direction guess (373 = 1T) was WRONG: 814
 THROWS_FILE = "throws.json"      # {char: {move: {"cmd": {code: n}, "hml": {v: n}}}}
 ANSWERS_FILE = "throw_answers.json"  # {char: {move: {"duck": [ok, n], "back": [..], "side": [..]}}}
 ESCAPES_FILE = "throw_escapes.json"  # {"cmd<CommandCode>": {"T": [ok, n], "6T": [..], "4T": [..], "2T": [..]}}
-# keyed by the throw's CommandCode, not (character, move): the break input
+TDMG_FILE = "throw_damage.json"  # {char: {move: damage this throw has cost us, all sessions}}
+# ESCAPES_FILE is keyed by the throw's CommandCode, not (character, move): the break input
 # is the throw's own command, so every character's 6T is broken the same
 # way, and survival mode shows each character's throws only once or twice
 # a throw is broken by matching its command: plain T for a neutral throw
@@ -1524,17 +1525,24 @@ def main():
         for mv_s, ent in throws_seen.get(str(fchar), {}).items():
             su = startup.get(fchar, int(mv_s))
             reach = ent.get("reach")
-            if su is None or su > 8 or reach is None:
+            if reach is None or su is None or (
+                    su > 8 and throw_cost(fchar, int(mv_s)) < 300):
                 continue
             st = answer_stats(fchar, int(mv_s))
             n = sum(v[1] for v in st.values())
             ok = sum(v[0] for v in st.values())
-            if n >= 4 and ok / n < 0.3 and (best is None or reach > best):
+            # either nothing answers it, or it has simply cost us too much:
+            # a multi-part command throw that lands one time in three still
+            # takes a third of the bar with it
+            bad = (n >= 4 and ok / n < 0.3) or (
+                n >= 6 and ok / n < 0.6 and throw_cost(fchar, int(mv_s)) >= 300)
+            if bad and (best is None or reach > best):
                 best, best_mv, best_su = reach, int(mv_s), su
         danger_cache.update(char=fchar, t=now, reach=best, mv=best_mv, su=best_su)
         return best
 
-    def pick_answer(ch, tmv, default, options=("duck", "back", "side", "lowkick", "hopkick")):
+    def pick_answer(ch, tmv, default, options=("duck", "back", "side", "lowkick", "hopkick"),
+                    explore=False):
         # "hopkick": 8K. Up + K together - a jumping/hop kick where the
         # character has one is airborne and cannot be thrown; where it does
         # not, up alone is a sidestep and the K a sidestep attack. Scored
@@ -1548,6 +1556,18 @@ def main():
         the best; a fresh move keeps the default until it fails twice."""
         st = answer_stats(ch, tmv)
         d = st.get(default, [0, 0])
+        if explore and "lowkick" in options:
+            # A default that is merely good blocks the better option for good:
+            # "duck" scores 82% on the slow throws, never drops under the 0.5
+            # bar, so 2K was never tried there - while on the fast throws,
+            # where it IS the default, 2K is 726/741 (98%) against duck's
+            # 508/736. So: every 6th answer to this move, spend one try on
+            # the least-tested option until it has 5 of its own.
+            for opt in ("lowkick",):
+                if opt != default and st.get(opt, [0, 0])[1] < 5:
+                    tries = sum(v[1] for v in st.values())
+                    if tries >= 3 and tries % 6 == 5:
+                        return opt
         if d[1] < 2 or (d[0] + 1) / (d[1] + 2) >= 0.5:
             return default
         best = default
@@ -1559,7 +1579,7 @@ def main():
                 best, best_s = opt, sc
         return best
 
-    def record_answer(ok):
+    def record_answer(ok, dmg=0):
         la = last_answer
         if la["done"] or la["mv"] is None:
             return
@@ -1568,7 +1588,17 @@ def main():
         st.setdefault(la["ans"], [0, 0])
         st[la["ans"]][0] += 1 if ok else 0
         st[la["ans"]][1] += 1
-        if not ok and st[la["ans"]][1] >= 2:
+        if not ok and dmg > 0:
+            ent = throw_dmg.setdefault(str(fchar), {})
+            ent[str(la["mv"])] = ent.get(str(la["mv"]), 0) + int(dmg)
+            try:
+                with open(TDMG_FILE, "w", encoding="utf-8") as fh:
+                    json.dump(throw_dmg, fh, indent=1, sort_keys=True)
+            except OSError:
+                pass
+        # one grab from a three-part command throw costs 120: waiting for a
+        # second failure before changing the answer pays for the lesson twice
+        if not ok and (st[la["ans"]][1] >= 2 or dmg >= 60):
             ok_, n_ = st[la["ans"]]
             nxt = pick_answer(fchar, la["mv"], la["ans"])
             if nxt != la["ans"]:
@@ -1579,6 +1609,15 @@ def main():
                 json.dump(throw_ans, fh, indent=1, sort_keys=True)
         except OSError:
             pass
+
+    try:
+        with open(TDMG_FILE, encoding="utf-8") as fh:
+            throw_dmg = json.load(fh)       # {char: {move: damage it has cost us}}
+    except (OSError, ValueError):
+        throw_dmg = {}
+
+    def throw_cost(ch, tmv):
+        return int(throw_dmg.get(str(ch), {}).get(str(tmv), 0))
 
     throw_cmd = {}          # foe throw startup move -> (cmd, hml) this session
     last_throw_start = [None, None, None]   # (move, cmd, hml) of the last kind-16 seen
@@ -2139,7 +2178,7 @@ def main():
                     # hit a croucher 10 times and was booked 10/10 "ok"
                     # because the damage read as another id): any damage
                     # within 0.8 s of the answer means the answer failed
-                    record_answer(False)
+                    record_answer(False, d)
                 dmg_by_state[act] = dmg_by_state.get(act, 0) + d
                 my_mv_hit = me.get("CurrentMove")
                 if 125 <= my_mv_hit <= 135 or 70 <= my_mv_hit <= 79:
@@ -2995,7 +3034,8 @@ def main():
                         # low kick's instant crouching status (8137 6/6,
                         # 8003 4/4): start those on the low kick
                         fast = t_known is not None and t_known <= 8
-                        answer = pick_answer(fchar, mv, "lowkick" if fast else "duck")
+                        answer = pick_answer(fchar, mv, "lowkick" if fast else "duck",
+                                             explore=True)
                     else:
                         answer = pick_answer(fchar, mv, "back")
                 if answer in ("back", "side", "duck", "lowkick", "hopkick", "wait"):
