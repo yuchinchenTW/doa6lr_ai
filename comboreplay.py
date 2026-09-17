@@ -382,6 +382,20 @@ def record(sides, hot, rebind):
                 last_mv = mv
             time.sleep(0.001)
             continue
+        if kind_now in (5, 6) and cmd != last_cmd:
+            # 5 is a hold's grab and 6 the hold landing: nothing can be input
+            # in either, and the game writes its own numbers there just as it
+            # does during a throw. The Shuffle's 3H caught the dummy and the
+            # catch read as cmd 2710 - a fourth "input" that never existed.
+            last_cmd = cmd
+            if mv != last_mv:
+                events.append({"t": round(now - started, 3), "mv": int(mv),
+                               "kind": int(kind_now), "throw": True})
+                print(f"  {now - started:6.3f}s  move {mv} (kind {kind_now}, "
+                      f"hold landing - not an input)")
+                last_mv = mv
+            time.sleep(0.001)
+            continue
         if kind_now == 0 and mv not in IDLE_MOVES and cmd != last_cmd:
             NEUTRAL_IDS.add(int(mv))     # dropping back into the dance
             last_cmd = cmd
