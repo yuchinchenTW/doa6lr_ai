@@ -654,8 +654,10 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                 continue
             seq.append(tk)
         # a strike string is what holdbot presses after an opener connects; a
-        # throw cannot be used there (you cannot grab a character in hit stun)
-        if len(seq) > 1 and not seq[0].endswith("T"):
+        # throw cannot be used there (you cannot grab a character in hit stun).
+        # A single move is fine - the pools already carry "S" and "P" as
+        # one-token recipes, and a special like 236P is exactly that.
+        if seq and not seq[0].endswith("T"):
             text = ",".join(seq)
             ch = me.get("CurrentCharacter")
             try:
