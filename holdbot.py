@@ -1653,6 +1653,7 @@ def main():
     prev_km = [None, None, 0]   # (kind, move, frame) last tick: a NEW throw start
                                 # is a kind/move change OR the frame counter dropping
     throw_epoch = [0]       # +1 every time a throw startup begins
+    throw_seen_t = [0.0]    # last tick the foe was in a throw startup (kind 16)
     answered_epoch = [-1]   # the epoch our last throw answer was for
     cornered = [0.0]        # until when we consider ourselves at a wall
     last_poke = [0.0]
@@ -1787,7 +1788,13 @@ def main():
         # Holds and guards both lose to it; remember it and step instead.
         if (pending and me.get("MoveType") == MT_THROWN
                 and pending[-1]["kind"] in ("high", "midp", "midk", "low", "break")
-                and now - pending[-1]["t"] < 0.35):
+                and now - pending[-1]["t"] < 0.35
+                and now - throw_seen_t[0] > 0.5):
+            # ...and no plain throw (kind 16 startup) in the last half
+            # second: a hold that whiffs on P gets thrown by the CPU's 6-frame
+            # T right after, and that put P (176), the low kicks (209/210)
+            # and half of Nyotengu's move list into oh.json as "offensive
+            # holds" - every one of them then guarded instead of held
             e = pending[-1]
             fmv_oh = e["pre"].get("fmv")
             ch = str(foe.get("CurrentCharacter"))
@@ -2122,6 +2129,8 @@ def main():
             fr = foe.get("CurrentMoveFrame")
             fchar = foe.get("CurrentCharacter")
             kind = foe.get("MoveKind")
+            if kind == MK_THROW:
+                throw_seen_t[0] = now
             if kind == MK_THROW and (prev_km[0] != MK_THROW or prev_km[1] != mv
                                      or fr < prev_km[2]):
                 throw_epoch[0] += 1
