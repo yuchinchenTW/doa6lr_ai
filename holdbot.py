@@ -1661,7 +1661,14 @@ def main():
                         # fell through to "MoveKind 0" - the end of the whole
                         # move - and every follow-up went out after the string
                         # had already dropped. That is the "super slow" four P's.
-                        need_t = (dts_t[n_st] - 0.03) if n_st < len(dts_t) else 0.15
+                        gap_t = dts_t[n_st] if n_st < len(dts_t) else 0.18
+                        # A long gap means the previous move has a long
+                        # recovery and the buffer opens well before it ends:
+                        # start at half and let the re-presses find the first
+                        # frame the game takes (H+K's follow-up P at 0.37 s
+                        # instead of 0.70 s). A short gap is a string branch,
+                        # where the demo's own interval is the right one.
+                        need_t = (gap_t * 0.5) if gap_t > 0.4 else (gap_t - 0.03)
                         left_t = need_t - (time.perf_counter() - t_step)
                         if left_t > 0:
                             time.sleep(left_t)
