@@ -183,7 +183,7 @@ RECIPE_TOKENS = {"236": "236", "214": "214", "33": "33", "22": "22", "44": "44",
 FAMILY = {10: "P", 11: "K", 55: "S", 50: "S", 57: "PK"}   # 13xx / 20xx were stance and hit follow-ups
 
 
-def candidates(cmd, want_mv=None):
+def candidates(cmd, want_mv=None, in_throw=False):
     """What to try for a code we never produced ourselves. The demo of one
     stage showed the hundreds are NOT a reliable button family (1083 and
     1085 were P+K after a hit, 1350-1353 P / K inside a stance), so: the
@@ -198,6 +198,12 @@ def candidates(cmd, want_mv=None):
     # Minato's stage-1 cmd 403 could only ever be tried as P, K, P+K... The
     # calibration numbers every throw 400-404 (T, 6T, 4T, 2T) and holdbot has
     # seen 363-386 and 1349 from the CPU, so treat that band as throws.
+    if in_throw:
+        # a follow-up pressed while the throw plays: T continues a throw
+        # chain, S is the Fatal Rush pattern, then the plain buttons
+        for b in ("T", "S", "P", "K", "PK", "HK", "6T", "4T", "2T"):
+            if b not in out:
+                out.append(b)
     if 350 <= cmd <= 420 or cmd in (1349, 1500, 1501):
         for b in ("T", "6T", "4T", "2T", "3T", "1T", "9T", "7T"):
             if b not in out:
@@ -252,7 +258,6 @@ def record(sides, hot, rebind):
     me = foe = None
     seen = {}
     t_bind = 0.0
-    throw_until = 0.0
     while True:
         for k in hot.pressed():
             if k == "F10":
@@ -304,26 +309,22 @@ def record(sides, hot, rebind):
         # what is one throw. Nothing can be input during a throw anyway.
         # A code that arrives with the character back in neutral (kind 0) is
         # the same kind of echo.
-        if kind_now == 4:
-            throw_until = now + 0.35          # and the echo lingers past the end
-        if kind_now == 4 or now < throw_until:
-            # the CommandCode echo is noise (2030/2032/2034 climbing with the
-            # animation) but the animation chain itself is the proof the throw
-            # ran to the end: 8141>8156>8158>8160 is three impacts, and a
-            # replay that stops at 8156 has dropped two of them
+        # A code arriving during a throw (MoveKind 4) looked like an echo of
+        # the animation - it always lands on frame 1, in lockstep with the
+        # move id. But a buffered follow-up input is consumed on exactly that
+        # frame too, and the decisive evidence is the replay: press 214T alone
+        # and the throw stops at 8156, while the demo runs on to 8158 and
+        # 8160. So they are inputs, and they are recorded like any other.
+        # What IS an echo is the code that arrives as we drop back into the
+        # dance (MoveKind 0 on a neutral id).
+        if kind_now == 0 and mv in NEUTRAL_IDS and cmd != last_cmd:
             last_cmd = cmd
-            if mv != last_mv:
-                events.append({"t": round(now - started, 3), "mv": int(mv),
-                               "kind": int(kind_now), "throw": True})
-                print(f"  {now - started:6.3f}s  move {mv} (kind {kind_now}, throw)")
-                last_mv = mv
-            time.sleep(0.001)
-            continue
         if cmd != last_cmd and cmd:
             d_in = distance(me, foe)
             events.append({"t": round(now - started, 3), "cmd": int(cmd), "tok": token(cmd),
                            "prev_mv": int(last_mv) if last_mv is not None else int(mv),
-                           "prev_fr": int(fr), "dist": None if d_in is None else round(d_in)})
+                           "prev_fr": int(fr), "in_throw": kind_now == 4,
+                           "dist": None if d_in is None else round(d_in)})
             print(f"  {now - started:6.3f}s  input {token(cmd):<6} (cmd {cmd})  "
                   f"during move {last_mv if last_mv is not None else mv} frame {fr}"
                   + (f"  dist {d_in:.0f}" if d_in is not None else ""))
@@ -365,7 +366,7 @@ def plan(events):
                 break
         steps.append({"tok": e["tok"], "cmd": e["cmd"], "prev_mv": e["prev_mv"],
                       "prev_fr": e["prev_fr"], "mv": produced, "dist": e.get("dist"),
-                      "dt": dt, "chain": chain})
+                      "dt": dt, "chain": chain, "in_throw": e.get("in_throw", False)})
     return steps
 
 
@@ -467,7 +468,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
     results, learned, misses = [], {}, []
     t_prev_press = time.perf_counter()
     for i, s in enumerate(steps):
-        from_idle = s["prev_mv"] in IDLE_MOVES
+        from_idle = s["prev_mv"] in IDLE_MOVES and not s.get("in_throw")
         if s["cmd"] in MOVE_CMDS or s["cmd"] == 135:
             # the demo's own steps toward the post: replaced by close_in()
             results.append((s["tok"], s["mv"], []))
@@ -539,7 +540,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             inj.down(names); time.sleep(0.05); inj.up(names)
             ok = True
         else:
-            cands = candidates(cmd, s["mv"])
+            cands = candidates(cmd, s["mv"], s.get("in_throw", False))
             if cands and tries.get(("_said", cmd)) is None:
                 tries[("_said", cmd)] = True
                 print(f"      cmd {cmd} is not in commands.json - trying, in order: "
