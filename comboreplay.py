@@ -521,7 +521,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         from_idle = s["prev_mv"] in IDLE_MOVES and not s.get("in_throw")
         if s["cmd"] in MOVE_CMDS or s["cmd"] in (135, 60) or s["mv"] is None:
             # the demo's own steps toward the post: replaced by close_in()
-            results.append((s["tok"], s["mv"], []))
+            step_tokens.append(None)
             print(f"  {i + 1:>2}. {s['tok']:<10} (the demo walking in - handled by closing in)")
             continue
         if from_idle:
@@ -532,18 +532,22 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             # version: the demo ran 8141>8156>8158>8160 and ours stopped at
             # 8156.
             t0 = time.perf_counter()
-            while time.perf_counter() - t0 < 4.0:
+            # Only the opening input waits for the post to be back on its feet.
+            # Later on the demo attacks the moment IT is free - waiting for the
+            # post too put the third part of stage 6 a long way behind.
+            want_up = i == 0
+            while time.perf_counter() - t0 < (4.0 if want_up else 1.2):
                 me.refresh()
                 if foe is not None:
                     foe.refresh()
-                up = foe is None or (neutral(foe)
-                                     and foe.get("CurrentMove") not in DOWNED)
+                up = (not want_up) or foe is None or (
+                    neutral(foe) and foe.get("CurrentMove") not in DOWNED)
                 if neutral(me) and up:
                     break
                 time.sleep(0.002)
-            time.sleep(0.05)
-            if foe is not None and (not neutral(foe)
-                                    or foe.get("CurrentMove") in DOWNED):
+            time.sleep(0.05 if want_up else 0.0)
+            if want_up and foe is not None and (not neutral(foe)
+                                                or foe.get("CurrentMove") in DOWNED):
                 print(f"      (the post is still busy: move {foe.get('CurrentMove')} "
                       f"kind {foe.get('MoveKind')} - pressing anyway)")
         if i > 0:
@@ -575,7 +579,8 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                     time.sleep(0.001)
         d_now = None
         if from_idle and foe is not None:
-            d_now = close_in(me, foe, inj, facing_right, s.get("dist"))
+            d_now = close_in(me, foe, inj, facing_right, s.get("dist"),
+                             timeout=2.5 if i == 0 else max(0.4, (s.get("dt") or 0.5)))
         cmd = s["cmd"]
         used = None
         t_prev_press = time.perf_counter()
@@ -705,11 +710,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
     # token sequence so holdbot can try it in a match: its bandit scores it by
     # net damage against everything else in the character's pool.
     if hits and hits == len(results) and len(results) > 1:
-        seq = []
-        for st, tk in zip(steps, step_tokens):
-            if st["cmd"] in MOVE_CMDS or tk is None:
-                continue
-            seq.append(tk)
+        seq = [tk for tk in step_tokens if tk]
         # Everything is saved, throws included: holdbot skips a throw-led
         # sequence when picking a combo recipe (a character in hit stun cannot
         # be grabbed) and uses the longest one where it has decided to throw
