@@ -1108,6 +1108,8 @@ def main():
                 best = t
         return best
 
+    t_last_t = 0.0
+
     def press_best_throw(bt):
         """Each part goes in when the previous part's animation changes.
 
@@ -1115,17 +1117,28 @@ def main():
         and 0.48 s apart, so 0.25 s everywhere pressed the last two early and
         the chain dropped."""
         for n_t, st_t in enumerate(parse_combo(bt)):
-            if n_t:
-                mv_t = me.get("CurrentMove")
-                t_t = time.perf_counter()
-                while time.perf_counter() - t_t < 0.9:
-                    me.refresh()
-                    if me.get("MoveKind") == 0:
-                        break             # the throw ended: nothing to chain
-                    if me.get("CurrentMove") != mv_t:
-                        break             # next part of the animation: press now
-                    time.sleep(0.003)
-            combo_press(st_t)
+            if not n_t:
+                combo_press(st_t)
+                continue
+            # The window is at the END of the part, not its start: the demo
+            # pressed 0.20, 0.53 and 0.48 s into each one. Rather than guess,
+            # press until the animation moves on - nothing else can come out
+            # while a throw is playing, so a spare press costs nothing.
+            mv_t = me.get("CurrentMove")
+            t_t = time.perf_counter()
+            tries_t = 0
+            while time.perf_counter() - t_t < 1.1:
+                me.refresh()
+                if me.get("MoveKind") == 0:
+                    break                 # the throw ended: nothing to chain
+                if me.get("CurrentMove") != mv_t:
+                    break                 # this part landed
+                if tries_t < 8 and (tries_t == 0
+                                    or time.perf_counter() - t_last_t > 0.12):
+                    combo_press(st_t)
+                    t_last_t = time.perf_counter()
+                    tries_t += 1
+                time.sleep(0.004)
 
     def cc_extra(char):
         """Combos the game's own Combo Challenge taught, cleared by
@@ -1628,18 +1641,23 @@ def main():
                 prev_tok = None
                 for n_st, st in enumerate(steps):
                     tok = st[2]
+                    before = me.get("CurrentMove")
                     if n_st and me.get("MoveKind") in (4, 5, 6):
-                        # a throw or hold is playing: the next part is taken
-                        # when its animation changes, not on a fixed delay.
-                        # Part 3 to 4 of the 214T chain is 0.48 s apart.
-                        mv_w, t_w = me.get("CurrentMove"), time.perf_counter()
-                        while time.perf_counter() - t_w < 0.9:
+                        # a throw or hold is playing: its window is at the END
+                        # of each part (0.20, 0.53, 0.48 s in for the 214T
+                        # chain), so press until the animation moves on
+                        mv_w, t_w, n_w, t_lw = before, time.perf_counter(), 0, 0.0
+                        while time.perf_counter() - t_w < 1.1:
                             me.refresh()
                             if me.get("MoveKind") == 0 or me.get("CurrentMove") != mv_w:
                                 break
-                            time.sleep(0.003)
-                    before = me.get("CurrentMove")
-                    combo_press(st)
+                            if n_w < 8 and (n_w == 0 or time.perf_counter() - t_lw > 0.12):
+                                combo_press(st)
+                                t_lw = time.perf_counter()
+                                n_w += 1
+                            time.sleep(0.004)
+                    else:
+                        combo_press(st)
                     got, t_s = [], time.perf_counter()
                     while time.perf_counter() - t_s < 0.9:
                         me.refresh()
