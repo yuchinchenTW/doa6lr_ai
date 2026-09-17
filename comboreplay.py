@@ -35,6 +35,7 @@ import time
 from fields import load_layout, locate_all
 from holdbot import Side
 from memlib import Process, find_pid
+from inputs import press_token
 from pad import KeyboardInjector, dirs_to_names
 
 u32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -465,61 +466,21 @@ def plan(events):
 
 def press(inj, tok_cmd, facing_right, hold=0.045, tok=None, dash_hold=0.13,
           dir_lead=0.017):
-    if tok is not None:
-        digits, btn = split_token(tok)
-        held = False
-    else:
+    """One token through the shared recipe in inputs.py (see the note there).
+
+    dash_hold/dir_lead are kept in the signature for the callers that pass
+    them; the shared recipe derives both, so they are advisory now."""
+    if tok is None:
         d = decode(tok_cmd)
         if d is None:
             return False
         digits, btn, held = d
-    if held:
-        hold = 0.7                  # a charged version: keep the button down
-    # a motion (46P+K): tap every direction but the last, 2 frames each
-    for dg in digits[:-1]:
-        ddx, ddy = NUMPAD.get(dg, (0, 0))
-        if not facing_right:
-            ddx = -ddx
-        names = dirs_to_names(ddx, ddy)
-        inj.down(names); time.sleep(0.033); inj.up(names); time.sleep(0.017)
-    digit = digits[-1] if digits else 0
-    dx, dy = NUMPAD.get(digit, (0, 0)) if digit else (0, 0)
-    if not facing_right:
-        dx = -dx
-    key = BUTTON_KEY[btn]
-    horiz = dirs_to_names(dx, 0)
-    vert = dirs_to_names(0, dy)
-    # The recipe the diagonal holds (7H / 1H) land with: the horizontal a
-    # frame ahead, then the VERTICAL AND THE BUTTON IN ONE SendInput call.
-    # A vertical sent on its own a frame early is read as a sidestep and
-    # the button then comes out neutral (8P+K replayed as P+K, move 8119).
-    dash = len(digits) >= 2 and digits[-1] == digits[-2]
-    if dash and horiz:
-        # A dash carries the move with it, and the run-up is most of the
-        # range. The demo held forward for 0.14 s before pressing; tapping
-        # and pressing 17 ms later produced the right move (8077) barely a
-        # step from where it started, and the 6P fell short of the post.
-        inj.down(horiz)
-        time.sleep(dash_hold)
-        inj.down(vert + [key])
-    elif horiz and vert and dy < 0:
-        # A DOWN diagonal needs both directions in place before the button.
-        # With the vertical sent alongside the button the game kept only the
-        # horizontal: Minato's 3K came out as 6K (8087) and 1P/7P as 4P, while
-        # the UP diagonals (9P 188, 9K 189) were fine. Combo Challenge stage 6
-        # opens with 3K, move 180, which no other input produces.
-        inj.down(horiz + vert)
-        time.sleep(0.05)
-        inj.down([key])
+        tok = "".join(str(x) for x in digits) + btn
     else:
-        if horiz:
-            inj.down(horiz)
-            time.sleep(dir_lead)
-        inj.down(vert + [key])
-    time.sleep(hold)
-    inj.up([key])
-    inj.up(vert + horiz)
-    return True
+        held = False
+    return press_token(inj, tok, facing_right=facing_right, hold=hold,
+                       distance=dash_hold * 1100.0 if dash_hold else None,
+                       in_string=dir_lead >= 0.04, held=held)
 
 
 MOVE_CMDS = {9: "66", 4: "44"}      # dashes seen in a demo (moves 3 / 5)

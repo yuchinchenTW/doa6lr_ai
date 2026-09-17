@@ -43,6 +43,7 @@ import time
 
 from fields import STRIKE_TYPE, field_address, load_layout, locate_all, read_field
 from memlib import Process, find_pid
+from inputs import press_token
 from pad import (HOLD_DIRECTIONS, STRIKE_TO_HOLD, dirs_to_names,
                  disable_high_res_timer, enable_high_res_timer, guard, hold,
                  make_injector, parse_hold_overrides, strike as jab)
@@ -1219,69 +1220,18 @@ def main():
     in_string = [False]            # a follow-up, not the first input
 
     def combo_press(step):
-        (dx, dy), btn, tok, motion = (step + ([],))[:4]
-        if btn is None:
-            # bare direction: hold it through the previous move's recovery so
-            # the stance transition takes, then let go
-            names_s = dirs_to_names(dx if facing_state[0] else -dx, dy)
-            if names_s:
-                inj.down(names_s)
-                time.sleep(0.18)
-                inj.up(names_s)
-                dir_touched[0] = time.perf_counter()
-            return tok
-        dash = bool(motion) and motion[-1] == ((dx, dy))
-        for mdx, mdy in motion:                      # 236P: tap 2, tap 3, then 6+P
-            mn = dirs_to_names(mdx if facing_state[0] else -mdx, mdy)
-            inj.down(mn); time.sleep(0.033); inj.up(mn); time.sleep(0.017)
-        sdx = dx if facing_state[0] else -dx
-        names = dirs_to_names(sdx, dy)
-        if not names:
-            inj.up(["left", "right", "up", "down"])   # S with back held is 4S
-            quiet = time.perf_counter() - dir_touched[0]
-            if quiet < 0.10:                           # let the 4/6 buffer expire
-                time.sleep(0.10 - quiet)
-        horiz, vert = dirs_to_names(sdx, 0), dirs_to_names(0, dy)
-        if dash and horiz:
-            # 66P is a RUN and then a punch, and the run is most of its range.
-            # The run-up has to cover the gap: 0.14 s was measured against a
-            # post 146 away, and a string that knocks the opponent further
-            # needs longer. No walking happens between combo inputs, so this
-            # is the only way the dash reaches.
-            d_dash, _ = distance()
-            # 0.13 s is the floor, not a midpoint: a shorter run-up is not read
-            # as a dash at all and 66P comes out as a plain 6P (177). Scale it
-            # UP with the gap, never down.
-            run = 0.13 if not d_dash else max(0.13, min(0.35, d_dash / 1100.0))
-            inj.down(horiz)
-            time.sleep(run)
-            inj.down(vert + [btn])
-        elif horiz and vert and dy < 0:
-            # A DOWN diagonal needs both directions in place before the
-            # button. Sent alongside it the game kept only the horizontal:
-            # Minato's 3K came out as 6K and 1P/7P as 4P, while the UP
-            # diagonals (9P, 9K) were fine.
-            inj.down(horiz + vert)
-            time.sleep(0.05)
-            inj.down([btn])
-        else:
-            if horiz:
-                inj.down(horiz)        # 6P/4P and the horizontal half of an
-                # a direction inside a string needs longer than the 17 ms that
-                # works from neutral: PPP>4P came out as the plain fourth P
-                time.sleep(0.05 if in_string[0] else 0.017)
-            # the vertical goes down WITH the button (down alone a frame ahead
-            # is a sidestep: 2T came out as id 32)
-            inj.down(vert + [btn])
-        # A string follow-up needs a longer press than a single move does.
-        # holdbot held a button for --press (0.020 s, 1.2 frames at 60 fps) and
-        # the second P of HK,PPPP vanished while comboreplay, holding 0.045 s,
-        # landed every one. The buffer window inside a string is stricter than
-        # the one from neutral.
-        time.sleep(max(args.press, 0.045))
-        inj.up([btn])
-        if names:
-            inj.up(names)
+        """One token through the shared recipe in inputs.py.
+
+        holdbot and comboreplay used to each carry their own copy, and every
+        fix - the dash run-up, the down diagonal, the 45 ms press, the string
+        direction lead - had to be found twice, months apart. There is one
+        copy now and this is the caller."""
+        tok = step[2]
+        d_now, _ = distance()
+        press_token(inj, tok, facing_right=facing_state[0], distance=d_now,
+                    in_string=in_string[0])
+        if step[1] is None:
+            dir_touched[0] = time.perf_counter()
         return tok
 
     def combo_reset(why):
