@@ -306,7 +306,16 @@ def record(sides, hot, rebind):
         if kind_now == 4:
             throw_until = now + 0.35          # and the echo lingers past the end
         if kind_now == 4 or now < throw_until:
-            last_cmd, last_mv = cmd, mv
+            # the CommandCode echo is noise (2030/2032/2034 climbing with the
+            # animation) but the animation chain itself is the proof the throw
+            # ran to the end: 8141>8156>8158>8160 is three impacts, and a
+            # replay that stops at 8156 has dropped two of them
+            last_cmd = cmd
+            if mv != last_mv:
+                events.append({"t": round(now - started, 3), "mv": int(mv),
+                               "kind": int(kind_now), "throw": True})
+                print(f"  {now - started:6.3f}s  move {mv} (kind {kind_now}, throw)")
+                last_mv = mv
             time.sleep(0.001)
             continue
         if cmd != last_cmd and cmd:
@@ -344,16 +353,18 @@ def plan(events):
             continue
         dt = None if t_prev is None else round(e["t"] - t_prev, 3)
         t_prev = e["t"]
-        produced = None
+        produced, chain = None, []
         for f in events[i + 1:]:
             if "mv" in f and f["mv"] not in IDLE_MOVES:
-                produced = f["mv"]
-                break
+                if produced is None:
+                    produced = f["mv"]
+                chain.append(f["mv"])
+                continue
             if "cmd" in f:
                 break
         steps.append({"tok": e["tok"], "cmd": e["cmd"], "prev_mv": e["prev_mv"],
                       "prev_fr": e["prev_fr"], "mv": produced, "dist": e.get("dist"),
-                      "dt": dt})
+                      "dt": dt, "chain": chain})
     return steps
 
 
@@ -535,6 +546,8 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         # into a moving attack: keep re-pressing until the previous move
         # ends, not for a fixed 0.35 s
         limit = (0.35 if from_idle else max(0.9, (s.get("dt") or 0) + 0.5)) if i + 1 < len(steps) else 1.2
+        if len(s.get("chain") or []) > 1:
+            limit = max(limit, 3.0)      # a throw runs for seconds
         again, t_last = 0, time.perf_counter()
         presses = [time.perf_counter() - t_prev_press]
         # once a follow-up's timing is known, one press (plus one spare):
@@ -589,6 +602,14 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
               + ("  HIT" if landed else "")
               + ("" if ok else "  (unknown code, nothing pressed)")
               + ("  OK" if hit else ""))
+        want_chain = [m for m in (s.get("chain") or []) if m not in NEUTRAL_IDS]
+        got_chain = [m for m in ids if m not in NEUTRAL_IDS]
+        if len(want_chain) > 1 and len(got_chain) < len(want_chain):
+            print(f"      the demo ran {'>'.join(map(str, want_chain))}, ours stopped "
+                  f"at {'>'.join(map(str, got_chain)) or 'nothing'}"
+                  + (f" (dist {d_now:.0f} vs the demo's {s.get('dist')})"
+                     if d_now is not None and s.get("dist") else "")
+                  + " - the throw grabbed air, or a later part needs its own input")
     hits = sum(1 for _, w, g in results if w is not None and w in g)
     print(f"  {hits}/{len(results)} moves matched the demonstration")
     for nm, cmd_m, mv_m, used_m in misses:
