@@ -620,6 +620,7 @@ def calibrate(sides, inj, facing_right, hot):
     # cmd 403, which none of 400/401/402/404 covered)
     order += [(d, "T") for d in (6, 4, 2, 8, 3, 9, 1, 7)]
     order += [("46", b) for b in ("PK", "P", "K")] + [("64", "PK"), ("236", "P"), ("214", "P")]
+    order += [(d, "T") for d in ("236", "214", "46", "64", "66", "44", "33", "22")]
     order += [("6hb", "PK"), ("4hb", "P"), ("6hb", "K")]   # BUTTON held 1 s
     # "hold the direction" commands (the screen said hold left/right + P+K
     # for the move the demo read as cmd 5780): direction held 0.35 s first
@@ -630,6 +631,7 @@ def calibrate(sides, inj, facing_right, hot):
     print(f"calibrating character {char}: stand idle in the game and do not "
           "touch the keys "
           f"({len(order)} inputs, ~1 s each). F10 aborts.")
+    time.sleep(1.0)       # the first input read None when it went out too early
     for digit, btn in order:
         if "F10" in hot.pressed():
             break
@@ -756,6 +758,14 @@ def probe(sides, inj, facing_right, hot, want_cmd, btn="PK"):
         ("run (66 held 0.7s), then " + btn,     lambda: (inj.down(f), wait(0.03), inj.up(f), wait(0.03), inj.down(f), wait(0.7), inj.down([key]), wait(0.05), inj.up([key] + f))),
         ("run, 2 + " + btn + " while running",  lambda: (inj.down(f), wait(0.03), inj.up(f), wait(0.03), inj.down(f), wait(0.7), inj.down(["down", key]), wait(0.05), inj.up(["down", key] + f))),
         ("left+right together + " + btn,       lambda: (inj.down(f + b), wait(0.017), inj.down([key]), wait(0.05), inj.up([key] + f + b))),
+        # quarter circles: Minato's only special motion is 236P, so a command
+        # throw of hers is most likely 236T or 214T
+        ("236 + " + btn,                       lambda: (inj.down(["down"]), wait(0.033), inj.up(["down"]), inj.down(["down"] + f), wait(0.033), inj.up(["down"]), wait(0.017), inj.down([key]), wait(0.05), inj.up([key] + f))),
+        ("214 + " + btn,                       lambda: (inj.down(["down"]), wait(0.033), inj.up(["down"]), inj.down(["down"] + b), wait(0.033), inj.up(["down"]), wait(0.017), inj.down([key]), wait(0.05), inj.up([key] + b))),
+        ("33 (fwd-down twice) + " + btn,       lambda: (inj.down(["down"] + f), wait(0.033), inj.up(["down"] + f), wait(0.03), inj.down(["down"] + f), wait(0.017), inj.down([key]), wait(0.05), inj.up([key, "down"] + f))),
+        ("22 (down twice) + " + btn,           lambda: (inj.down(["down"]), wait(0.033), inj.up(["down"]), wait(0.03), inj.down(["down"]), wait(0.017), inj.down([key]), wait(0.05), inj.up([key, "down"]))),
+        ("44 (back dash) + " + btn,            lambda: (inj.down(b), wait(0.03), inj.up(b), wait(0.03), inj.down(b), wait(0.05), inj.down([key]), wait(0.05), inj.up([key] + b))),
+        ("41236 + " + btn,                     lambda: (inj.down(b), wait(0.033), inj.up(b), inj.down(["down"] + b), wait(0.033), inj.up(b), wait(0.017), inj.down(["down"] + f), wait(0.033), inj.up(["down"]), wait(0.017), inj.down([key]), wait(0.05), inj.up([key] + f))),
     ]
     print(f"probing for cmd {want_cmd} with {btn}. F10 aborts.")
     for name, do in recipes:
