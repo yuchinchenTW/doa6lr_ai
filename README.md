@@ -30,7 +30,8 @@ the bot's: 1st and 3rd as Mai Shiranui (5,977,400 / 3,822,600), 2nd and 4th–7t
 - Opponent changes (Survival), sitting on P1 or P2, 3-way vs 4-way hold setting and deliberately
   added input lag are detected automatically or covered by a flag.
 - **Trained only with Nyotengu (id 21) and Mai Shiranui (id 30).** Offence tables (poke, combo
-  pool) and combo statistics exist for these two only. Any other character falls back to a generic
+  pool) and combo statistics exist for these two; Kula Diamond (id 31) has a poke and combo pool
+  from the Free Step Dodge guide but no match statistics yet. Any other character falls back to a generic
   combo pool and a P poke and has to accumulate its statistics from scratch. On the opponent side
   the tables (`startup.json` etc.) cover only the CPU characters actually met so far; a new
   opponent has to be learned move by move (unknown moves are guarded by default).

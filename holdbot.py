@@ -113,6 +113,7 @@ OH_FILE = "oh.json"              # {char: [move ids]} - strikes that are really
 CHAR_COMBOS = {
     21: {"default": "S,S,S,S",           # after P+K (or any single stun hit)
          176: "P,S,S,S,S"},              # after a plain P: PP is the +29 stun
+    31: {"default": "P,P,K"},            # Kula: fallback when the pool is off
     # "ground": "2T" after a hold is off: the CPU techs every time (2T came
     # out as 8422/8143, 0 dmg x5) and the whiff left us busy for its next hit
 }
@@ -130,6 +131,15 @@ RECIPE_POOL = {
     # and the one-hit options. All buttons + horizontals, all string branches.
     30: {"default": ["S,S,S,S", "P,P,P,P", "P,P,K", "K,K,K", "6P,K,K", "P,P,2K", "S", "P"],
          176:       ["P,P,P", "P,K", "P,2K", "S,S,S,S", "P", "S"]},
+    # Kula: 8PP (+19 stun), PPK (safe pressure), 6PP (+23 stun on CH), KKK
+    # (bound), PP6P; 8K launches on a normal hit (15 f) with 9PK / 6PP as
+    # the guide's juggles; 9KP is a +34 stun; 236P Diamond Breath freezes.
+    # 9K / 9P are diagonals and 236P a motion - the calibration showed
+    # diagonals register when the character has the move, so they are in
+    # the pool and the net-damage bandit decides.
+    31: {"default": ["8P,P", "P,P,K", "6P,P", "K,K,K", "P,P,6P", "8K,6P,P", "8K,9P,K",
+                     "9K,P", "236P,6P,P", "S,S,S,S", "S", "P"],
+         176:       ["P,K", "P,6P", "P,P,K", "S,S,S,S", "P", "S"]},
 }
 # any other character we play: strings every DOA6 character has, scored the
 # same way (P string, PPK, the Fatal Rush, and the two one-hit "take it and
@@ -143,9 +153,14 @@ COMBO_STATS_FILE = "combo_stats.json"   # {char: {opener: {recipe: [n, dmg]}}}
 # NORMAL hit, which is what our stun follow-ups want. Launchers she has need
 # diagonals (3P, 3P+K) or 8K (up+K = a sidestep here), so the pool is strings.
 CHAR_POKE = {21: "pk",           # P+K is her poke; P (14 f, +1 on hit) is not
-             30: "4P"}           # Mai: back+P, +35 stun on normal hit
+             30: "4P",           # Mai: back+P, +35 stun on normal hit
+             # Kula Diamond (char 31, Free Step Dodge beginners' guide): P is
+             # 9 f but -5 on hit, 6P 11 f is -11 on a normal hit. 8P (17 f,
+             # rising mid punch) gives a +29 lift stun on a NORMAL hit and
+             # needs only up + P, which the keyboard sends reliably.
+             31: "8P"}
 GENERIC_COMBO = "P,P,P,K"
-CHAR_NAMES = {21: "Nyotengu", 30: "Mai"}
+CHAR_NAMES = {21: "Nyotengu", 30: "Mai", 31: "Kula"}
 
 
 def throw_class(cmd, hml):
@@ -382,7 +397,7 @@ def main():
                          "the punish after a guard, and as the combo on a stunned "
                          "foe. On by default now that the gauge is read for real")
     ap.add_argument("--poke", default="auto",
-                    choices=["kick", "punch", "pk", "hk", "4P", "6P", "auto", "none"],
+                    choices=["kick", "punch", "pk", "hk", "4P", "6P", "8P", "auto", "none"],
                     help="attack to throw out when the foe is idle or walking "
                          "in at --poke-min..--poke-max, or is getting up close "
                          "by. Strikes beat throws: the 7-frame dash throw "
@@ -923,12 +938,18 @@ def main():
             tok = tok.strip().upper()
             if not tok:
                 continue
-            d = tok[0] if tok[0] in NUMPAD else None
-            btn = COMBO_BTN.get(tok[1:] if d else tok)
+            i = 0
+            while i < len(tok) and tok[i] in NUMPAD:
+                i += 1
+            digits, rest = tok[:i], tok[i:]
+            btn = COMBO_BTN.get(rest)
             if btn is None:
                 print(f"combo: unknown token {tok!r}, ignored")
                 continue
-            seq.append((NUMPAD.get(d, (0, 0)), btn, tok))
+            # "236P": every direction but the last is tapped first (motion)
+            motion = [NUMPAD[c] for c in digits[:-1]]
+            last = NUMPAD.get(digits[-1], (0, 0)) if digits else (0, 0)
+            seq.append((last, btn, tok, motion))
         return seq
 
     combo_seqs = {k: parse_combo(v) for k, v in combo_table.items()}
@@ -986,7 +1007,10 @@ def main():
     combo_stats = {"started": 0, "hits": 0, "dmg": 0, "by_len": {}}
 
     def combo_press(step):
-        (dx, dy), btn, tok = step
+        (dx, dy), btn, tok, motion = (step + ([],))[:4]
+        for mdx, mdy in motion:                      # 236P: tap 2, tap 3, then 6+P
+            mn = dirs_to_names(mdx if facing_state[0] else -mdx, mdy)
+            inj.down(mn); time.sleep(0.033); inj.up(mn); time.sleep(0.017)
         sdx = dx if facing_state[0] else -dx
         names = dirs_to_names(sdx, dy)
         if not names:
@@ -994,13 +1018,15 @@ def main():
             quiet = time.perf_counter() - dir_touched[0]
             if quiet < 0.10:                           # let the 4/6 buffer expire
                 time.sleep(0.10 - quiet)
-        if names and dy == 0:
-            inj.down(names)            # 6P/4P: direction a frame ahead
-            time.sleep(0.017)
-            inj.down([btn])
-        else:
-            inj.down(names + [btn])    # down alone a frame ahead is a sidestep
-        time.sleep(args.press)         # (2T came out as id 32), so together
+        horiz, vert = dirs_to_names(sdx, 0), dirs_to_names(0, dy)
+        if horiz:
+            inj.down(horiz)            # 6P/4P and the horizontal half of a
+            time.sleep(0.017)          # diagonal: a frame ahead
+        # the vertical goes down WITH the button (down alone a frame ahead is
+        # a sidestep: 2T came out as id 32). This is the recipe the
+        # calibration landed 3K / 7P / 1P / 8P with.
+        inj.down(vert + [btn])
+        time.sleep(args.press)
         inj.up([btn])
         if names:
             inj.up(names)
