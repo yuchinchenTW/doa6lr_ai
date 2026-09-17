@@ -776,6 +776,9 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         if not hit and s["mv"] is not None and ids:
             tries.setdefault("_miss", []).append((s["tok"], used, ids[0]))
         if not hit and used and decode(cmd) is None:
+            # remember what has already been ruled out, so the "next is ..."
+            # line and the next replay both skip it
+            tries.setdefault("_bad", {}).setdefault(cmd, set()).add(used)
             misses.append((s["tok"], cmd, s["mv"], used))
         results.append((s["tok"], s["mv"], ids))
         step_tokens.append(token(cmd) if decode(cmd) is not None else used)
@@ -829,9 +832,10 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             else:
                 print(f"  \"{text}\" is already in {CC_FILE}")
     for nm, cmd_m, mv_m, used_m in misses:
-        cands = candidates(cmd_m, mv_m)
+        bad = tries.get("_bad", {}).get(cmd_m, set())
+        cands = [c for c in candidates(cmd_m, mv_m) if c not in bad]
         if cands:
-            nxt = cands[tries.get((cmd_m, mv_m), 0) % len(cands)]
+            nxt = cands[0]
             print(f"      {nm}: {used_m} was wrong - next is {nxt} "
                   f"(F8 once, or F9 to run through them)")
     return hits, len(results)
