@@ -50,6 +50,7 @@ NUMPAD = {1: (-1, -1), 2: (0, -1), 3: (1, -1), 4: (-1, 0), 5: (0, 0),
           6: (1, 0), 7: (-1, 1), 8: (0, 1), 9: (1, 1)}
 IDLE_MOVES = (0, 1, 2, 3, 4)
 NEUTRAL_IDS = set()   # animation ids this character shows while MoveKind is 0
+DOWNED = tuple(range(70, 100)) + tuple(range(125, 140))   # lying down / getting up
 
 
 def neutral(side):
@@ -472,15 +473,32 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             results.append((s["tok"], s["mv"], []))
             print(f"  {i + 1:>2}. {s['tok']:<10} (the demo walking in - handled by closing in)")
             continue
+        if from_idle:
+            # BOTH of us, and the first step too. This wait used to be inside
+            # "if i > 0", so a one-input stage fired the instant F8 was
+            # pressed - with the post still lying where the last replay threw
+            # it. A throw onto a body that is not standing plays a short
+            # version: the demo ran 8141>8156>8158>8160 and ours stopped at
+            # 8156.
+            t0 = time.perf_counter()
+            while time.perf_counter() - t0 < 4.0:
+                me.refresh()
+                if foe is not None:
+                    foe.refresh()
+                up = foe is None or (neutral(foe)
+                                     and foe.get("CurrentMove") not in DOWNED)
+                if neutral(me) and up:
+                    break
+                time.sleep(0.002)
+            time.sleep(0.05)
+            if foe is not None and (not neutral(foe)
+                                    or foe.get("CurrentMove") in DOWNED):
+                print(f"      (the post is still busy: move {foe.get('CurrentMove')} "
+                      f"kind {foe.get('MoveKind')} - pressing anyway)")
         if i > 0:
             t0 = time.perf_counter()
             if from_idle:
-                while time.perf_counter() - t0 < 2.5:      # the demo waited for idle
-                    me.refresh()
-                    if neutral(me):
-                        break
-                    time.sleep(0.001)
-                time.sleep(0.03)
+                pass
             else:
                 # The demo's "frame 1" is the game pre-loading its own next
                 # command; the real timing is the interval between the two
