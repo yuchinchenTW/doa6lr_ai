@@ -51,6 +51,7 @@ NUMPAD = {1: (-1, -1), 2: (0, -1), 3: (1, -1), 4: (-1, 0), 5: (0, 0),
 IDLE_MOVES = (0, 1, 2, 3, 4)
 CC_FILE = "combo_challenge.json"   # {char: ["HK,P,P,P,P", ...]} cleared stages
 NEUTRAL_IDS = set()   # animation ids this character shows while MoveKind is 0
+CHAR_TABLE = [False]  # this character's own calibration is loaded
 DOWNED = tuple(range(70, 100)) + tuple(range(125, 140))   # lying down / getting up
 
 
@@ -128,13 +129,23 @@ def load_commands(path="commands.json", char=None):
     table = read_commands(path)
     if not table:
         return
-    _apply_commands(table)
-    if char is not None:
-        sec = (table.get("chars") or {}).get(str(char))
-        if isinstance(sec, dict):
-            _apply_commands(sec)
-            print(f"  commands.json: character {char} section applied "
-                  f"({len([k for k in sec if not k.startswith('_')])} inputs)")
+    sec = (table.get("chars") or {}).get(str(char)) if char is not None else None
+    if isinstance(sec, dict) and [k for k in sec if not k.startswith("_")]:
+        # Codes are NOT shared across characters. Minato's Combo Challenge
+        # used cmd 1320, which is absent from her table, so the shared one
+        # (Nyotengu's calibration) answered "2HK" and the replay pressed a
+        # move she does not have. Her own table is the only truth; anything
+        # missing from it stays unknown and goes to the candidate search.
+        CMD_TABLE.clear()
+        MOVE_TABLE.clear()
+        HINTS.clear()
+        _apply_commands(sec)
+        CHAR_TABLE[0] = True
+        print(f"  commands.json: character {char} only "
+              f"({len([k for k in sec if not k.startswith('_')])} inputs; the "
+              f"shared table is not used - codes differ per character)")
+    else:
+        _apply_commands(table)
 
 
 def distance(me, foe):
@@ -161,6 +172,12 @@ def decode(cmd):
         tok, held = CMD_TABLE[cmd]
         digits, btn = split_token(tok)
         return digits, btn, held
+    if CHAR_TABLE[0]:
+        # the formulas below were read off Nyotengu (her K band starts at
+        # 1100); Minato's K is 1220, so cmd 1190 decoded to "9K" and the
+        # replay pressed a move she does not have. With her own table loaded,
+        # anything missing from it is unknown, not guessed.
+        return None
     if cmd == 363:
         return [], "T", False
     if 364 <= cmd <= 369:
@@ -209,6 +226,17 @@ def candidates(cmd, want_mv=None, in_throw=False):
         for b in ("T", "6T", "4T", "2T", "3T", "1T", "9T", "7T"):
             if b not in out:
                 out.append(b)
+    # The nearest calibrated code is the best guide to the button: Minato's
+    # K sits at 1220, 6K at 1280, 4K at 1300, 2K at 1310, so cmd 1320 is a
+    # kick of some sort and nothing else is worth trying first.
+    if CMD_TABLE:
+        gap, near = min((abs(c - cmd), c) for c in CMD_TABLE)
+        if gap <= 40:
+            btn_n = CMD_TABLE[near][0].lstrip("0123456789")
+            for d in ("", "2", "6", "4", "8", "3", "1", "9", "7"):
+                c_tok = f"{d}{btn_n}"
+                if c_tok not in out:
+                    out.append(c_tok)
     fam = FAMILY.get(cmd // 100)
     first = ["6S", "S"] if fam == "S" else ([fam] if fam else [])   # 6S: the Break Blow (8381)
     # H: the Break Blow's follow-up on the stage screen was "-> S  H";
@@ -216,6 +244,10 @@ def candidates(cmd, want_mv=None, in_throw=False):
     for b in first + ["P", "PK", "K", "HK", "S", "H", "2P", "6P", "4P", "2K"]:
         if b not in out:
             out.append(b)
+    for btn_l in ("K", "P", "PK", "HK"):          # nothing left but brute force
+        for d in ("2", "6", "4", "8", "3", "1", "9", "7"):
+            if f"{d}{btn_l}" not in out:
+                out.append(f"{d}{btn_l}")
     digit = (cmd % 100) // 10
     if fam and digit and digit in NUMPAD and digit != 5 and f"{digit}{fam}" not in out:
         out.append(f"{digit}{fam}")
@@ -471,7 +503,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
     t_prev_press = time.perf_counter()
     for i, s in enumerate(steps):
         from_idle = s["prev_mv"] in IDLE_MOVES and not s.get("in_throw")
-        if s["cmd"] in MOVE_CMDS or s["cmd"] == 135:
+        if s["cmd"] in MOVE_CMDS or s["cmd"] in (135, 60) or s["mv"] is None:
             # the demo's own steps toward the post: replaced by close_in()
             results.append((s["tok"], s["mv"], []))
             print(f"  {i + 1:>2}. {s['tok']:<10} (the demo walking in - handled by closing in)")
@@ -543,6 +575,9 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             ok = True
         else:
             cands = candidates(cmd, s["mv"], s.get("in_throw", False))
+            prev_tok = step_tokens[-1] if step_tokens else None
+            if prev_tok and i and cmd == steps[i - 1]["cmd"] + 1:
+                cands = [prev_tok] + [c for c in cands if c != prev_tok]
             if s.get("in_throw") and tries.get("_throw_tok"):
                 # part 2 of Minato's 214T was 214T again: a multi-part throw
                 # repeats its own input, so whatever carried the last part is
