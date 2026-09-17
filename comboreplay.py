@@ -56,18 +56,13 @@ MOVE_TABLE = {}     # move id -> token that produced it in the calibration
 HINTS = {}          # cmd -> token to try FIRST (read off the stage's task list)
 
 
-def load_commands(path="commands.json"):
+def _apply_commands(table):
     """The calibration table is the truth: P+K is 1210 neutral / 5770 with
     6 / 1230 with 4, 4K is 1540, 1P is 1014 - no formula gives those. A cmd
     exactly 10 above a known one is that input with the BUTTON HELD (the
     stage that asked for "hold P+K" read 5780 where 6P+K reads 5770)."""
-    try:
-        with open(path, encoding="utf-8") as fh:
-            table = json.load(fh)
-    except (OSError, ValueError):
-        return
     for tok, v in table.items():
-        if tok.startswith("_"):
+        if tok.startswith("_") or tok == "chars" or not isinstance(v, dict):
             continue
         for m in ([v.get("move")] if v.get("move") else []) + list(v.get("ids") or []):
             if m and (m not in MOVE_TABLE or len(tok) < len(MOVE_TABLE[m])):
@@ -86,6 +81,34 @@ def load_commands(path="commands.json"):
         HINTS[int(c_s)] = tok
     # (the "+10 = button held" rule is gone: 5510 is the second S of the
     # Fatal Rush, 5780 is the 46P+K motion)
+
+
+def read_commands(path="commands.json"):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def load_commands(path="commands.json", char=None):
+    """The calibration table is the truth: P+K is 1210 neutral / 5770 with
+    6 / 1230 with 4, 4K is 1540, 1P is 1014 - no formula gives those.
+
+    Codes are mostly the input, not the character, so the shared table at the
+    top level is applied first; anything under chars/<id> then overrides it,
+    because a code CAN mean different things (5500 is Nyotengu's Fatal Rush)
+    and calibrating a second character must not delete the first one."""
+    table = read_commands(path)
+    if not table:
+        return
+    _apply_commands(table)
+    if char is not None:
+        sec = (table.get("chars") or {}).get(str(char))
+        if isinstance(sec, dict):
+            _apply_commands(sec)
+            print(f"  commands.json: character {char} section applied "
+                  f"({len([k for k in sec if not k.startswith('_')])} inputs)")
 
 
 def distance(me, foe):
@@ -208,7 +231,14 @@ def record(sides, hot, rebind):
                 if seen.get(name) != st:
                     seen[name] = st
                     print(f"    [{name}] move {st[0]} kind {st[1]} cmd {st[2]}")
-                if st[0] not in IDLE_MOVES and st[1] in (3, 16, 5):
+                # MoveKind 3/16/5 covers strikes and throws for the
+                # characters seen so far, but Minato's first Combo Challenge
+                # move reads kind 2 (move 8130, cmd 5900) and the recorder sat
+                # in the wait loop forever. An attack command code is the
+                # reliable tell: walking and dashing are cmd 3/4/9/60/135,
+                # every attack is 1000+.
+                if st[0] not in IDLE_MOVES and (st[1] in (2, 3, 5, 16)
+                                                or (st[2] or 0) >= 1000):
                     me = sd
                     foe = [o for n, o in sides.items() if n != name][0]
                     started = now
@@ -499,12 +529,11 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
     hits = sum(1 for _, w, g in results if w is not None and w in g)
     print(f"  {hits}/{len(results)} moves matched the demonstration")
     if learned:
-        try:
-            with open("commands.json", encoding="utf-8") as fh:
-                table = json.load(fh)
-        except (OSError, ValueError):
-            table = {}
-        table.setdefault("_learned", {}).update({str(c): t for c, t in learned.items()})
+        table = read_commands()
+        char = me.get("CurrentCharacter")
+        where = (table.setdefault("chars", {}).setdefault(str(char), {})
+                 if char is not None else table)
+        where.setdefault("_learned", {}).update({str(c): t for c, t in learned.items()})
         with open("commands.json", "w", encoding="utf-8") as fh:
             json.dump(table, fh, indent=1)
         for c, t in learned.items():
@@ -528,8 +557,10 @@ def calibrate(sides, inj, facing_right, hot):
     # for the move the demo read as cmd 5780): direction held 0.35 s first
     for d in (6, 4):
         order += [(f"{d}h", b) for b in ("P", "K", "PK", "HK", "S")]
+    char = me.get("CurrentCharacter")
     table = {}
-    print("calibrating: stand idle in the game and do not touch the keys "
+    print(f"calibrating character {char}: stand idle in the game and do not "
+          "touch the keys "
           f"({len(order)} inputs, ~1 s each). F10 aborts.")
     for digit, btn in order:
         if "F10" in hot.pressed():
@@ -585,9 +616,14 @@ def calibrate(sides, inj, facing_right, hot):
         table[tok] = {"cmd": got_cmd, "move": ids[0] if ids else None, "ids": ids}
         print(f"  {tok:<5} -> cmd {got_cmd}  move {'>'.join(map(str, ids)) if ids else None}")
         time.sleep(0.4)
+    whole = read_commands()
+    if not [k for k in whole if not k.startswith("_") and k != "chars"]:
+        whole.update(table)            # first ever calibration: it IS the shared table
+    whole.setdefault("chars", {}).setdefault(str(char), {}).update(table)
     with open("commands.json", "w", encoding="utf-8") as fh:
-        json.dump(table, fh, indent=1)
-    print("saved commands.json")
+        json.dump(whole, fh, indent=1)
+    print(f"saved commands.json (character {char} section; the other "
+          f"characters' entries were kept)")
 
 
 def probe(sides, inj, facing_right, hot, want_cmd, btn="PK"):
@@ -677,6 +713,7 @@ def main():
     load_commands()
     if CMD_TABLE:
         print(f"commands.json: {len(CMD_TABLE)} command codes known")
+    char_loaded = [None]
     layout = load_layout()
     pid = find_pid(args.process or layout["process"])
     if pid is None:
@@ -702,6 +739,17 @@ def main():
         return sides
 
     sides = rebind()
+    if sides:
+        # the codes a character actually produces are in that character's
+        # own section: load it before the first recording
+        try:
+            sides[args.me].refresh()
+            ch = sides[args.me].get("CurrentCharacter")
+            if ch is not None and 0 <= ch < 128:
+                char_loaded[0] = ch
+                load_commands(char=ch)
+        except Exception:
+            pass
     inj = KeyboardInjector()
     hot = Hotkeys()
     facing_right = args.facing == "right"
