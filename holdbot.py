@@ -117,6 +117,7 @@ CHAR_COMBOS = {
     21: {"default": "S,S,S,S",           # after P+K (or any single stun hit)
          176: "P,S,S,S,S"},              # after a plain P: PP is the +29 stun
     31: {"default": "P,P,K"},            # Kula: fallback when the pool is off
+    35: {"default": "P,P,P,P"},          # Minato: the guide's universal juggle
     # "ground": "2T" after a hold is off: the CPU techs every time (2T came
     # out as 8422/8143, 0 dmg x5) and the whiff left us busy for its next hit
 }
@@ -148,6 +149,17 @@ RECIPE_POOL = {
                      "9K,P", "236P,6P,P", "S,S,S,S", "S", "P"],
          176:       ["P,K", "P,6P", "P,P,K", "S,S,S,S", "P", "S"],
          "lowkick":  ["P", "6P,P", "S"]},
+    # Minato: launchers 8K (18 f), 8P (15 f, crouch-dash upper), 2P+K (18 f)
+    # and 3P+K; the guide's juggle is PPPP off 8K / 8P / 3P+K and 6KK off
+    # 2P+K, with 6PPP as the bound ender. Fast strings: PKK 10 f, 6PP 12 f
+    # (the 2nd hit tracks), KP 12 f, 4PK 14 f, 3KK 15 f. 66P is the
+    # long-reach +21 tool. "2PK" is P+K with a direction: the token parser
+    # takes the leading numpad digits and PK is the P+K button.
+    35: {"default": ["8K,P,P,P,P", "8P,P,P,P,P", "2PK,6K,K", "6P,P,P",
+                     "P,K,K", "K,P", "4P,K", "3K,K", "66P",
+                     "S,S,S,S", "S", "P"],
+         176:       ["P,K,K", "P,P,P,P", "6P,P", "S,S,S,S", "P", "S"],
+         "lowkick":  ["P", "6P,P", "S"]},
 }
 # any other character we play: strings every DOA6 character has, scored the
 # same way (P string, PPK, the Fatal Rush, and the two one-hit "take it and
@@ -169,16 +181,25 @@ CHAR_POKE = {21: "pk",           # P+K is her poke; P (14 f, +1 on hit) is not
              # ...but 8P as a poke came out as a sidestep 3 of 7 times in a
              # match (up alone = free step) and landed 1/7. 6P (11 f, mid,
              # +20 stun on counter hit) is the reliable horizontal.
-             31: "6P"}
+             31: "6P",
+             # Minato (char 35, the DLC released 2026-09-10; doa6wiki and the
+             # goziline guide - Free Step Dodge has no frame data for her yet).
+             # 6K is 13 f and +17 on a NORMAL hit, and the guide says her 8P
+             # launcher is guaranteed after it: a poke that opens straight
+             # into the juggle. 66P is better on paper (+21, -4 on block, long
+             # reach) but it is a dash that closes the gap into throw range,
+             # which is where this bot loses rounds, so it sits in the pool
+             # instead and the bandit prices it.
+             35: "6K"}
 GENERIC_COMBO = "P,P,P,K"
-CHAR_NAMES = {21: "Nyotengu", 30: "Mai", 31: "Kula"}
+CHAR_NAMES = {21: "Nyotengu", 30: "Mai", 31: "Kula", 35: "Minato"}
 CHAR_PUNCH_REACH = {31: 105}     # how far the standing P punish still lands
 # startup of the standing P, for the "interrupt a slow throw with a punch"
 # answer: it has to be live before the grab. Nyotengu's 14 f P lost the
 # race against char 7's 16-frame 8109 (hi-counter grab, unbreakable) with
 # the flat 11-frame threshold that Kula's 9 f P made look fine (5/6).
 # Mai's value is a guess from the guest characters' usual 10-11 f jab.
-CHAR_P_STARTUP = {21: 14, 30: 11, 31: 9}
+CHAR_P_STARTUP = {21: 14, 30: 11, 31: 9, 35: 10}   # Minato's PKK is 10 f
 
 
 def throw_class(cmd, hml):
