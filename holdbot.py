@@ -2044,11 +2044,14 @@ def main():
                 gauge_seen[side_name][1] = max(gauge_seen[side_name][1], gv)
             my_hp_now = me.get("CurrentHealth")
             foe_hp_now = foe.get("CurrentHealth")
-            if foe_hp_now == 0 and prev_hp[1] > 0:
+            # a KO leaves the winner with health: both bars at 0 is the
+            # object reset between matches (arcade: 7 "round lost, their hp
+            # 0" in a 17-0 session, each right after "anchors moved")
+            if foe_hp_now == 0 and prev_hp[1] > 0 and my_hp_now > 0:
                 rounds[0] += 1
                 round_end[0] = now
                 print(f"  ===== ROUND WON  ({rounds[0]}-{rounds[1]}) our hp {my_hp_now}")
-            if my_hp_now == 0 and prev_hp[0] > 0:
+            if my_hp_now == 0 and prev_hp[0] > 0 and foe_hp_now > 0:
                 rounds[1] += 1
                 round_end[0] = now
                 print(f"  ===== round lost ({rounds[0]}-{rounds[1]}) their hp {foe_hp_now}")
