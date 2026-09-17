@@ -190,6 +190,14 @@ def candidates(cmd, want_mv=None):
         out.append(HINTS[cmd])
     if want_mv in MOVE_TABLE and MOVE_TABLE[want_mv] not in out:
         out.append(MOVE_TABLE[want_mv])
+    # A THROW code was unanswerable: "T" was not in the list at all, so
+    # Minato's stage-1 cmd 403 could only ever be tried as P, K, P+K... The
+    # calibration numbers every throw 400-404 (T, 6T, 4T, 2T) and holdbot has
+    # seen 363-386 and 1349 from the CPU, so treat that band as throws.
+    if 350 <= cmd <= 420 or cmd in (1349, 1500, 1501):
+        for b in ("T", "6T", "4T", "2T", "3T", "1T", "9T", "7T"):
+            if b not in out:
+                out.append(b)
     fam = FAMILY.get(cmd // 100)
     first = ["6S", "S"] if fam == "S" else ([fam] if fam else [])   # 6S: the Break Blow (8381)
     # H: the Break Blow's follow-up on the stage screen was "-> S  H";
@@ -500,6 +508,10 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             ok = True
         else:
             cands = candidates(cmd, s["mv"])
+            if cands and tries.get(("_said", cmd)) is None:
+                tries[("_said", cmd)] = True
+                print(f"      cmd {cmd} is not in commands.json - trying, in order: "
+                      + " ".join(cands[:8]) + "  (--calibrate names it for good)")
             if cands:
                 n = tries.get((cmd, s["mv"]), 0)
                 used = cands[n % len(cands)]
