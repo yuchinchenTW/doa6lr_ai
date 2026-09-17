@@ -847,12 +847,18 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         # never appears as a step, but without it holdbot's P,P,P,6P is just
         # the fourth P of the string. "4" goes into the sequence where the
         # recording saw the kind-13 transition.
-        seq = []
+        # The demo's own interval before each input goes with it: H+K runs
+        # 0.72 s and its follow-up P is pressed after that, while a string
+        # branch comes 0.19 s in. Without the timing holdbot presses as soon as
+        # the previous move appears and the input is eaten.
+        seq, dts = [], []
         for st_i, tk in zip(steps, step_tokens):
             if st_i.get("stance_before"):
                 seq.append(STANCE_TOKEN)
+                dts.append(0.0)
             if tk:
                 seq.append(tk)
+                dts.append(round(st_i.get("dt") or 0.0, 3))
         # Everything is saved, throws included: holdbot skips a throw-led
         # sequence when picking a combo recipe (a character in hit stun cannot
         # be grabbed) and uses the longest one where it has decided to throw
@@ -868,14 +874,21 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                 cc = {}
             lst = cc.setdefault(str(ch), [])
             have = [e["seq"] if isinstance(e, dict) else e for e in lst]
-            if text not in have:
-                lst.append(text)
+            if text in have:
+                i_e = have.index(text)
+                if isinstance(lst[i_e], dict):
+                    lst[i_e]["dt"] = dts
+                else:
+                    lst[i_e] = {"seq": text, "dt": dts}
                 with open(CC_FILE, "w", encoding="utf-8") as fh:
                     json.dump(cc, fh, indent=1, sort_keys=True)
-                print(f"  saved \"{text}\" to {CC_FILE} - holdbot will try it "
-                      f"for character {ch}")
+                print(f"  \"{text}\" already in {CC_FILE} - timing refreshed")
             else:
-                print(f"  \"{text}\" is already in {CC_FILE}")
+                lst.append({"seq": text, "dt": dts})
+                with open(CC_FILE, "w", encoding="utf-8") as fh:
+                    json.dump(cc, fh, indent=1, sort_keys=True)
+                print(f"  saved \"{text}\" to {CC_FILE} with its timing - "
+                      f"holdbot will try it for character {ch}")
     for nm, cmd_m, mv_m, used_m in misses:
         bad = tries.get("_bad", {}).get(cmd_m, set())
         cands = [c for c in candidates(cmd_m, mv_m) if c not in bad]

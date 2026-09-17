@@ -1054,10 +1054,13 @@ def main():
         for e in raw:
             if isinstance(e, dict) and e.get("seq"):
                 out.append((e["seq"], bool(e.get("wall"))))
+                if e.get("dt"):
+                    cc_dt[e["seq"]] = [float(x) for x in e["dt"]]
             elif isinstance(e, str) and e:
                 out.append((e, False))
         return out
 
+    cc_dt = {}          # recipe -> the demo's interval before each input
     foe_span = {"x": [None, None], "z": [None, None]}
 
     def note_foe_pos():
@@ -1264,7 +1267,12 @@ def main():
             # the vertical goes down WITH the button (down alone a frame ahead
             # is a sidestep: 2T came out as id 32)
             inj.down(vert + [btn])
-        time.sleep(args.press)
+        # A string follow-up needs a longer press than a single move does.
+        # holdbot held a button for --press (0.020 s, 1.2 frames at 60 fps) and
+        # the second P of HK,PPPP vanished while comboreplay, holding 0.045 s,
+        # landed every one. The buffer window inside a string is stricter than
+        # the one from neutral.
+        time.sleep(max(args.press, 0.045))
         inj.up([btn])
         if names:
             inj.up(names)
@@ -1612,9 +1620,10 @@ def main():
         expect = {k: v.get("move") for k, v in _sec.items()
                   if isinstance(v, dict) and v.get("move")}
 
+        known = cc_all(my_char)        # also fills cc_dt with the timings
         if args.test_combo == "all":
             strings = list(RECIPE_POOL.get(my_char, GENERIC_POOL).get("default") or [])
-            for t, _w in cc_all(my_char):
+            for t, _w in known:
                 if t not in strings:
                     strings.append(t)
         else:
@@ -1634,11 +1643,22 @@ def main():
                     time.sleep(0.005)
                 time.sleep(0.25)
                 steps = parse_combo(text)
+                dts_t = cc_dt.get(text) or []
                 print(f"  {text}" + (f"  (run {run_n + 1})" if args.test_repeat > 1 else ""))
                 hp0 = foe.get("CurrentHealth")
                 prev_tok = None
                 for n_st, st in enumerate(steps):
                     tok = st[2]
+                    if n_st:
+                        # The demo's own gap is the whole rule. Our side's
+                        # Phase field is not reliable, so waiting for RECOVERY
+                        # fell through to "MoveKind 0" - the end of the whole
+                        # move - and every follow-up went out after the string
+                        # had already dropped. That is the "super slow" four P's.
+                        need_t = (dts_t[n_st] - 0.03) if n_st < len(dts_t) else 0.15
+                        left_t = need_t - (time.perf_counter() - t_step)
+                        if left_t > 0:
+                            time.sleep(left_t)
                     before = me.get("CurrentMove")
                     if n_st and me.get("MoveKind") in (4, 5, 6):
                         # a throw or hold is playing: its window is at the END
@@ -1656,12 +1676,26 @@ def main():
                             time.sleep(0.004)
                     else:
                         combo_press(st)
+                    t_step = time.perf_counter()
                     got, t_s = [], time.perf_counter()
+                    again_t, t_ag = 0, time.perf_counter()
                     while time.perf_counter() - t_s < 0.9:
                         me.refresh()
                         mv_n, k_n = me.get("CurrentMove"), me.get("MoveKind")
-                        if k_n != 0 and mv_n != before and (not got or got[-1] != mv_n):
+                        fresh = mv_n != before
+                        if k_n != 0 and fresh and (not got or got[-1] != mv_n):
                             got.append(int(mv_n))
+                        # Nothing out yet: press again, the way comboreplay
+                        # does. A follow-up that lands in the previous move's
+                        # active frames is simply eaten, and one press per
+                        # token left the second P of HK,PPPP missing every run
+                        # while the replay's "+1 re-press" landed it.
+                        elif (not got and again_t < 6
+                              and me.get("MoveKind") not in (4, 5, 6)
+                              and time.perf_counter() - t_ag > 0.07):
+                            combo_press(st)
+                            again_t += 1
+                            t_ag = time.perf_counter()
                         # press the next token as soon as this one is out, the
                         # way the engine does. Waiting for neutral put the
                         # second part of a four-part throw 0.9 s late, where
@@ -1672,6 +1706,10 @@ def main():
                             break
                         time.sleep(0.002)
                     want = expect.get(tok)
+                    if again_t:
+                        tok_show = f"{tok}(+{again_t})"
+                    else:
+                        tok_show = tok
                     chain = tok == prev_tok and got
                     prev_tok = tok
                     if tok.strip("0123456789") == "":
@@ -1689,7 +1727,7 @@ def main():
                         mark = "ok"
                     else:
                         mark = f"WRONG - expected {want}"
-                    print(f"      {tok:<6} -> {'>'.join(map(str, got)) or '-':<22} {mark}")
+                    print(f"      {tok_show:<8} -> {'>'.join(map(str, got)) or '-':<22} {mark}")
                 dealt = hp0 - foe.get("CurrentHealth")
                 print(f"      damage to the dummy: {dealt if 0 <= dealt < 500 else '?'}\n")
                 time.sleep(1.0)
@@ -2941,6 +2979,14 @@ def main():
                     elif ready or (foe_open and my_idle and d_c <= args.combo_range
                                    and now - combo["t"] > 0.03):
                         do_press = True
+                        # the demo's own interval, where we recorded one: H+K
+                        # runs 0.72 s and its follow-up comes after that, so
+                        # pressing as soon as the move appears loses the input
+                        dts = cc_dt.get(combo.get("recipe"))
+                        if dts and combo["i"] < len(dts):
+                            need = dts[combo["i"]] - 0.05
+                            if need > 0.05 and now - combo["t"] < need:
+                                do_press = False
                     elif (my_type_now in (MT_HIT, MT_THROWN, MT_HOLD_HIT, 7)
                           and not in_stance and now - combo["t"] > 0.1):
                         combo_reset(f"we are type {my_type_now}")   # hit / thrown / held
