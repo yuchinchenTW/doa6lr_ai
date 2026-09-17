@@ -202,7 +202,7 @@ RECIPE_TOKENS = {"236": "236", "214": "214", "33": "33", "22": "22", "44": "44",
 FAMILY = {10: "P", 11: "K", 55: "S", 50: "S", 57: "PK"}   # 13xx / 20xx were stance and hit follow-ups
 
 
-def candidates(cmd, want_mv=None, in_throw=False, after_walk=False):
+def candidates(cmd, want_mv=None, in_throw=False, after_walk=False, follow_up=False):
     """What to try for a code we never produced ourselves. The demo of one
     stage showed the hundreds are NOT a reliable button family (1083 and
     1085 were P+K after a hit, 1350-1353 P / K inside a stance), so: the
@@ -231,6 +231,15 @@ def candidates(cmd, want_mv=None, in_throw=False, after_walk=False):
         # the demo stepped forward and then attacked: that is how a dash move
         # is buffered, and none of 66P / 66K was ever in the list
         for b in ("66P", "66K", "66PK", "66HK", "33P", "33K"):
+            if b not in out:
+                out.append(b)
+    if follow_up:
+        # A string continuation is numbered in its own space: PPPP runs
+        # 1000/1001/1002/1003, and Minato's PPP>4P read 5701 while her
+        # standalone 4P is 1150. The nearest calibrated code says nothing
+        # here, so go through the branches a string can actually take.
+        for b in ("P", "6P", "4P", "2P", "8P", "K", "6K", "4K", "2K", "8K",
+                  "PK", "6PK", "2PK", "HK", "S", "3K", "3P"):
             if b not in out:
                 out.append(b)
     # The nearest calibrated code is the best guide to the button: Minato's
@@ -624,7 +633,8 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             ok = True
         else:
             cands = candidates(cmd, s["mv"], s.get("in_throw", False),
-                               after_walk=s["prev_mv"] in (1, 3, 5, 6))
+                               after_walk=s["prev_mv"] in (1, 3, 5, 6),
+                               follow_up=not from_idle)
             prev_tok = step_tokens[-1] if step_tokens else None
             if (prev_tok and i and cmd == steps[i - 1]["cmd"] + 1
                     and tries.get((cmd, s["mv"]), 0) == 0):
