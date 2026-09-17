@@ -1589,10 +1589,16 @@ def main():
             # 508/736. So: every 6th answer to this move, spend one try on
             # the least-tested option until it has 5 of its own.
             for opt in ("lowkick",):
-                if opt != default and st.get(opt, [0, 0])[1] < 5:
-                    tries = sum(v[1] for v in st.values())
-                    if tries >= 3 and tries % 6 == 5:
-                        return opt
+                ok_o, n_o = st.get(opt, [0, 0])
+                if opt == default or n_o >= 5:
+                    continue
+                if n_o >= 2 and ok_o == 0:
+                    continue      # 2K went 0/3 against char 21's 17-frame
+                                  # 8144 while the duck was 272/295: the
+                                  # question is answered, stop paying for it
+                tries = sum(v[1] for v in st.values())
+                if tries >= 3 and tries % 6 == 5:
+                    return opt
         if d[1] < 2 or (d[0] + 1) / (d[1] + 2) >= 0.5:
             return default
         best = default
@@ -1614,7 +1620,7 @@ def main():
         st[la["ans"]][0] += 1 if ok else 0
         st[la["ans"]][1] += 1
         if not ok and dmg > 0:
-            ent = throw_ent(fchar, la["mv"])
+            ent = throw_ent(fchar, la["mv"], create=True)
             ent["dmg"] = ent.get("dmg", 0) + int(dmg)
             save_throw_dmg()
         # one grab from a three-part command throw costs 120: waiting for a
@@ -1637,7 +1643,15 @@ def main():
     except (OSError, ValueError):
         throw_dmg = {}
 
-    def throw_ent(ch, tmv):
+    def throw_ent(ch, tmv, create=False):
+        """create=False must not touch the table: a read that inserted an
+        empty entry filled throw_damage.json with every throw ever seen,
+        garbage character ids included."""
+        if not create:
+            ent = throw_dmg.get(str(ch), {}).get(str(tmv))
+            if isinstance(ent, dict):
+                return ent
+            return {"dmg": int(ent), "hi": 0} if isinstance(ent, int) else {}
         ent = throw_dmg.setdefault(str(ch), {}).setdefault(str(tmv), {})
         if not isinstance(ent, dict):                  # the first format was a bare int
             ent = {"dmg": int(ent), "hi": 0}
@@ -1722,7 +1736,7 @@ def main():
         escape["seq"] = None
         ok = me.get("CurrentHealth") >= seq["hp0"]
         if seq.get("hi") and not ok:
-            ent = throw_ent(fchar, seq["st"])
+            ent = throw_ent(fchar, seq["st"], create=True)
             ent["hi"] = ent.get("hi", 0) + 1
             ent["dmg"] = ent.get("dmg", 0) + max(0, seq["hp0"] - me.get("CurrentHealth"))
             save_throw_dmg()
