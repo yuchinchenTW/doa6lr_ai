@@ -201,7 +201,7 @@ RECIPE_TOKENS = {"236": "236", "214": "214", "33": "33", "22": "22", "44": "44",
 FAMILY = {10: "P", 11: "K", 55: "S", 50: "S", 57: "PK"}   # 13xx / 20xx were stance and hit follow-ups
 
 
-def candidates(cmd, want_mv=None, in_throw=False):
+def candidates(cmd, want_mv=None, in_throw=False, after_walk=False):
     """What to try for a code we never produced ourselves. The demo of one
     stage showed the hundreds are NOT a reliable button family (1083 and
     1085 were P+K after a hit, 1350-1353 P / K inside a stance), so: the
@@ -226,6 +226,12 @@ def candidates(cmd, want_mv=None, in_throw=False):
         for b in ("T", "6T", "4T", "2T", "3T", "1T", "9T", "7T"):
             if b not in out:
                 out.append(b)
+    if after_walk:
+        # the demo stepped forward and then attacked: that is how a dash move
+        # is buffered, and none of 66P / 66K was ever in the list
+        for b in ("66P", "66K", "66PK", "66HK", "33P", "33K"):
+            if b not in out:
+                out.append(b)
     # The nearest calibrated code is the best guide to the button: Minato's
     # K sits at 1220, 6K at 1280, 4K at 1300, 2K at 1310, so cmd 1320 is a
     # kick of some sort and nothing else is worth trying first.
@@ -245,7 +251,7 @@ def candidates(cmd, want_mv=None, in_throw=False):
         if b not in out:
             out.append(b)
     for btn_l in ("K", "P", "PK", "HK"):          # nothing left but brute force
-        for d in ("2", "6", "4", "8", "3", "1", "9", "7"):
+        for d in ("2", "6", "4", "8", "3", "1", "9", "7", "66", "33", "236", "214"):
             if f"{d}{btn_l}" not in out:
                 out.append(f"{d}{btn_l}")
     digit = (cmd % 100) // 10
@@ -574,7 +580,8 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             inj.down(names); time.sleep(0.05); inj.up(names)
             ok = True
         else:
-            cands = candidates(cmd, s["mv"], s.get("in_throw", False))
+            cands = candidates(cmd, s["mv"], s.get("in_throw", False),
+                               after_walk=s["prev_mv"] in (1, 3, 5, 6))
             prev_tok = step_tokens[-1] if step_tokens else None
             if (prev_tok and i and cmd == steps[i - 1]["cmd"] + 1
                     and tries.get((cmd, s["mv"]), 0) == 0):
