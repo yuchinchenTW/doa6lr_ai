@@ -588,6 +588,25 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             step_tokens.append(None)
             print(f"  {i + 1:>2}. {s['tok']:<10} (the demo walking in - handled by closing in)")
             continue
+        if s.get("stance_before"):
+            # The Shuffle is entered by a bare direction right after the move
+            # that allows it, and the window is short: the demo's stance came
+            # 0.19 s after the P. Waiting for the move to be "under way" first
+            # spent 0.4 s and she had dropped back into the dance by then. Tap
+            # back at once and keep tapping until the transition takes.
+            back = dirs_to_names(-1 if facing_right else 1, 0)
+            t_st = time.perf_counter()
+            taps = 0
+            while time.perf_counter() - t_st < 0.55:
+                me.refresh()
+                if me.get("MoveKind") == 13:
+                    break
+                if taps < 5:
+                    inj.down(back); time.sleep(0.07); inj.up(back)
+                    taps += 1
+                time.sleep(0.01)
+            print(f"      (stance entry: {taps} back tap(s), kind now "
+                  f"{me.get('MoveKind')} move {me.get('CurrentMove')})")
         if from_idle:
             # BOTH of us, and the first step too. This wait used to be inside
             # "if i > 0", so a one-input stage fired the instant F8 was
@@ -650,30 +669,6 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                              keep=keep_fwd)
         cmd = s["cmd"]
         used = None
-        if s.get("stance_before"):
-            # The Minato Shuffle is entered by a bare direction after the move
-            # that allows it (the guide lists 6PP4, KP4, 3KK4, PPP4), so it
-            # produces no move of its own and the recording only sees the
-            # kind-13 transition. Tap back and wait for it.
-            back = dirs_to_names(-1 if facing_right else 1, 0)
-            # wait for the move that allows the transition to be under way,
-            # then hold back through its recovery (the demo's stance appeared
-            # ~0.30 s after that move started)
-            t_w = time.perf_counter()
-            while time.perf_counter() - t_w < 0.4:
-                me.refresh()
-                if me.get("MoveKind") == 3:
-                    break
-                time.sleep(0.002)
-            inj.down(back); time.sleep(0.18); inj.up(back)
-            t_st = time.perf_counter()
-            while time.perf_counter() - t_st < 0.5:
-                me.refresh()
-                if me.get("MoveKind") == 13:
-                    break
-                time.sleep(0.002)
-            print(f"      (stance entry: tapped back, kind now "
-                  f"{me.get('MoveKind')} move {me.get('CurrentMove')})")
         t_prev_press = time.perf_counter()
         if HELD_FWD:
             hf = list(HELD_FWD)
