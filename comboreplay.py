@@ -419,7 +419,8 @@ def plan(events):
     return steps
 
 
-def press(inj, tok_cmd, facing_right, hold=0.045, tok=None, dash_hold=0.13):
+def press(inj, tok_cmd, facing_right, hold=0.045, tok=None, dash_hold=0.13,
+          dir_lead=0.017):
     if tok is not None:
         digits, btn = split_token(tok)
         held = False
@@ -469,7 +470,7 @@ def press(inj, tok_cmd, facing_right, hold=0.045, tok=None, dash_hold=0.13):
     else:
         if horiz:
             inj.down(horiz)
-            time.sleep(0.017)
+            time.sleep(dir_lead)
         inj.down(vert + [key])
     time.sleep(hold)
     inj.up([key])
@@ -621,8 +622,12 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             hf = []
         # a dash follows the demo's own run-up length
         dh = max(0.06, min(0.30, s.get("dt") or 0.13)) if s["prev_mv"] in (1, 3, 5, 6) else 0.13
+        # A direction inside a string needs longer than the 17 ms that works
+        # from neutral: PPP>4P came out as the plain fourth P (8047), the back
+        # having been dropped, and that broke the 6P after it as well.
+        dl = 0.017 if from_idle else 0.05
         if decode(cmd) is not None:
-            ok = press(inj, cmd, facing_right, dash_hold=dh)
+            ok = press(inj, cmd, facing_right, dash_hold=dh, dir_lead=dl)
             used = token(cmd)
         elif cmd in MOVE_CMDS:
             used = MOVE_CMDS[cmd]
@@ -658,7 +663,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                                         and results[-1][1] in results[-1][2])
                 if prev_ok:
                     tries[(cmd, s["mv"])] = n + 1
-                ok = press(inj, cmd, facing_right, tok=used, dash_hold=dh)
+                ok = press(inj, cmd, facing_right, tok=used, dash_hold=dh, dir_lead=dl)
             else:
                 ok = False
         if hf:
@@ -705,7 +710,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                 # human timing. Press again every ~4 frames (holdbot's
                 # combo engine lands its strings this way)
                 press(inj, cmd, facing_right, tok=used if decode(cmd) is None else None,
-                      dash_hold=dh)
+                      dash_hold=dh, dir_lead=dl)
                 again += 1
                 t_last = time.perf_counter()
                 presses.append(t_last - t_prev_press)

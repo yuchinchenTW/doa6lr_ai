@@ -1130,6 +1130,8 @@ def main():
             r += 40
         return r
 
+    in_string = [False]            # a follow-up, not the first input
+
     def combo_press(step):
         (dx, dy), btn, tok, motion = (step + ([],))[:4]
         dash = bool(motion) and motion[-1] == ((dx, dy))
@@ -1163,7 +1165,9 @@ def main():
         else:
             if horiz:
                 inj.down(horiz)        # 6P/4P and the horizontal half of an
-                time.sleep(0.017)      # up-diagonal: a frame ahead
+                # a direction inside a string needs longer than the 17 ms that
+                # works from neutral: PPP>4P came out as the plain fourth P
+                time.sleep(0.05 if in_string[0] else 0.017)
             # the vertical goes down WITH the button (down alone a frame ahead
             # is a sidestep: 2T came out as id 32)
             inj.down(vert + [btn])
@@ -2711,7 +2715,9 @@ def main():
                     if do_press:
                         if zoning is not None:
                             inj.up(zoning); zoning = None
+                        in_string[0] = combo["i"] > 0
                         tok = combo_press(nxt)
+                        in_string[0] = False
                         combo["i"] += 1
                         combo["last_mv"] = my_mv_tick
                         combo["t"] = now
