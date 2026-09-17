@@ -876,6 +876,10 @@ def calibrate(sides, inj, facing_right, hot):
     # Challenge stage can be a single directional throw (Minato's first is
     # cmd 403, which none of 400/401/402/404 covered)
     order += [(d, "T") for d in (6, 4, 2, 8, 3, 9, 1, 7)]
+    # H on its own and with every direction: the holds. A Combo Challenge
+    # stage can ask for one (Minato's Shuffle 3H catches a mid punch), and
+    # nothing else in the table produces those codes.
+    order += [(0, "H")] + [(d, "H") for d in (4, 6, 2, 8, 7, 1, 3, 9)]
     order += [("46", b) for b in ("PK", "P", "K")] + [("64", "PK"), ("236", "P"), ("214", "P")]
     order += [(d, "T") for d in ("236", "214", "46", "64", "66", "44", "33", "22")]
     order += [("6hb", "PK"), ("4hb", "P"), ("6hb", "K")]   # BUTTON held 1 s
