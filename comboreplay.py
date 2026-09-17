@@ -812,14 +812,19 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         # 0.72 s and its follow-up P is pressed after that, while a string
         # branch comes 0.19 s in. Without the timing holdbot presses as soon as
         # the previous move appears and the input is eaten.
-        seq, dts, carry = [], [], 0.0
+        seq, dts, mvs, carry = [], [], [], 0.0
         for st_i, tk in zip(steps, step_tokens):
             if st_i.get("stance_before"):
                 seq.append(STANCE_TOKEN)
                 dts.append(0.0)
+                mvs.append(None)
             if tk:
                 seq.append(tk)
                 dts.append(round((st_i.get("dt") or 0.0) + carry, 3))
+                # the move the DEMO produced, which is what "correct" means:
+                # the second input of 3K,K,66P makes 8093, the string's second
+                # hit, and a standalone K (179) is the combo having dropped
+                mvs.append(st_i.get("mv"))
                 carry = 0.0
             else:
                 # a skipped step (the demo walking in) still took time, and
@@ -847,13 +852,14 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                 i_e = have.index(text)
                 if isinstance(lst[i_e], dict):
                     lst[i_e]["dt"] = dts
+                    lst[i_e]["mv"] = mvs
                 else:
-                    lst[i_e] = {"seq": text, "dt": dts}
+                    lst[i_e] = {"seq": text, "dt": dts, "mv": mvs}
                 with open(CC_FILE, "w", encoding="utf-8") as fh:
                     json.dump(cc, fh, indent=1, sort_keys=True)
                 print(f"  \"{text}\" already in {CC_FILE} - timing refreshed")
             else:
-                lst.append({"seq": text, "dt": dts})
+                lst.append({"seq": text, "dt": dts, "mv": mvs})
                 with open(CC_FILE, "w", encoding="utf-8") as fh:
                     json.dump(cc, fh, indent=1, sort_keys=True)
                 print(f"  saved \"{text}\" to {CC_FILE} with its timing - "

@@ -1057,11 +1057,14 @@ def main():
                 out.append((e["seq"], bool(e.get("wall"))))
                 if e.get("dt"):
                     cc_dt[e["seq"]] = [float(x) for x in e["dt"]]
+                if e.get("mv"):
+                    cc_mv[e["seq"]] = list(e["mv"])
             elif isinstance(e, str) and e:
                 out.append((e, False))
         return out
 
     cc_dt = {}          # recipe -> the demo's interval before each input
+    cc_mv = {}          # recipe -> the move id each input produced in the demo
     foe_span = {"x": [None, None], "z": [None, None]}
 
     def note_foe_pos():
@@ -1635,7 +1638,13 @@ def main():
                         # waits for the previous move to finish, but the buffer
                         # opens in its RECOVERY - sleeping the whole 0.735 s
                         # after H+K put the P visibly late.
-                        need_t = (dts_t[n_st] * 0.5) if n_st < len(dts_t) else 0.1
+                        # the demo's whole gap, less the input lag. Half of it
+                        # plus re-presses looked faster but the second input of
+                        # 3K,K,66P came out as a standalone K (179) instead of
+                        # the string's 8093 - the early presses are spent in
+                        # the previous move's active frames and the string has
+                        # dropped by the time one lands.
+                        need_t = (dts_t[n_st] - 0.05) if n_st < len(dts_t) else 0.1
                         left_t = max(0.04, need_t) - (time.perf_counter() - t_step)
                         if left_t > 0:
                             time.sleep(left_t)
@@ -1685,7 +1694,8 @@ def main():
                         if k_n == 0 and time.perf_counter() - t_s > 0.4:
                             break
                         time.sleep(0.002)
-                    want = expect.get(tok)
+                    mvs_t = cc_mv.get(text) or []
+                    want = mvs_t[n_st] if n_st < len(mvs_t) and mvs_t[n_st] else expect.get(tok)
                     if again_t:
                         tok_show = f"{tok}(+{again_t})"
                     else:
