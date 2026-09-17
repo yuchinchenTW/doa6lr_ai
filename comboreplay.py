@@ -593,15 +593,25 @@ def calibrate(sides, inj, facing_right, hot):
         key = BUTTON_KEY[btn]
         if horiz:
             inj.down(horiz); time.sleep(0.35 if held else 0.017)
-        inj.down(vert + [key]); time.sleep(1.0 if held_btn else 0.045)
-        inj.up([key]); inj.up(vert + horiz)
+        inj.down(vert + [key])
+        # Sample from the frame the button goes DOWN, not after the release.
+        # The held variants hold the button for a second and the direction for
+        # a third: waiting for the release meant the move had already played
+        # and ended, and all thirteen of them recorded "cmd None move None"
+        # even though they visibly came out.
+        hold_for = 1.0 if held_btn else 0.045
+        t_press = time.perf_counter()
+        released = False
         # the CommandCode flickers through direction codes (2, 6, 1349...)
         # on the way to the attack's own code: take the one in place on the
         # frame the move id appears, and keep every id the move goes through
         # (a charged 6P+K starts as 8427 and becomes 8428 while held)
         got_cmd, ids = None, []
-        t1 = time.perf_counter()
-        while time.perf_counter() - t1 < 0.9:
+        limit = 1.8 if (held_btn or held) else 0.9
+        while time.perf_counter() - t_press < limit:
+            if not released and time.perf_counter() - t_press >= hold_for:
+                inj.up([key]); inj.up(vert + horiz)
+                released = True
             me.refresh()
             c, m = me.get("CommandCode"), me.get("CurrentMove")
             if m not in IDLE_MOVES:
@@ -609,9 +619,11 @@ def calibrate(sides, inj, facing_right, hot):
                     got_cmd = int(c) if c else None
                 if not ids or ids[-1] != m:
                     ids.append(int(m))
-            elif ids:
+            elif ids and released:
                 break
             time.sleep(0.002)
+        if not released:
+            inj.up([key]); inj.up(vert + horiz)
         tok = f"{digit if digit else ''}{btn}"
         table[tok] = {"cmd": got_cmd, "move": ids[0] if ids else None, "ids": ids}
         print(f"  {tok:<5} -> cmd {got_cmd}  move {'>'.join(map(str, ids)) if ids else None}")

@@ -155,8 +155,13 @@ RECIPE_POOL = {
     # (the 2nd hit tracks), KP 12 f, 4PK 14 f, 3KK 15 f. 66P is the
     # long-reach +21 tool. "2PK" is P+K with a direction: the token parser
     # takes the leading numpad digits and PK is the P+K button.
+    # Her calibration (commands.json, chars/35) settles which inputs are real:
+    # 8P 190, 8K 191, 2P+K 8108, 6P 177, K 179, 4P 8071, 6K 8087 all distinct,
+    # and 214P 8130 (cmd 5900) is the Combo Challenge stage-1 move. 3K and 3P
+    # collapse to 6K / 6P and 1P/7P to 4P, so the diagonals are not worth a
+    # pool slot - 3KK is dropped for 6KK.
     35: {"default": ["8K,P,P,P,P", "8P,P,P,P,P", "2PK,6K,K", "6P,P,P",
-                     "P,K,K", "K,P", "4P,K", "3K,K", "66P",
+                     "P,K,K", "K,P", "4P,K", "6K,K", "66P", "214P",
                      "S,S,S,S", "S", "P"],
          176:       ["P,K,K", "P,P,P,P", "6P,P", "S,S,S,S", "P", "S"],
          "lowkick":  ["P", "6P,P", "S"]},
