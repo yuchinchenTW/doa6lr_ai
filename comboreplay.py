@@ -317,7 +317,8 @@ def record(sides, hot, rebind):
         # 8160. So they are inputs, and they are recorded like any other.
         # What IS an echo is the code that arrives as we drop back into the
         # dance (MoveKind 0 on a neutral id).
-        if kind_now == 0 and mv in NEUTRAL_IDS and cmd != last_cmd:
+        if kind_now == 0 and mv not in IDLE_MOVES and cmd != last_cmd:
+            NEUTRAL_IDS.add(int(mv))     # dropping back into the dance
             last_cmd = cmd
         if cmd != last_cmd and cmd:
             d_in = distance(me, foe)
@@ -541,6 +542,12 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             ok = True
         else:
             cands = candidates(cmd, s["mv"], s.get("in_throw", False))
+            if s.get("in_throw") and tries.get("_throw_tok"):
+                # part 2 of Minato's 214T was 214T again: a multi-part throw
+                # repeats its own input, so whatever carried the last part is
+                # the first thing to try for this one
+                t_rep = tries["_throw_tok"]
+                cands = [t_rep] + [c for c in cands if c != t_rep]
             if cands and tries.get(("_said", cmd)) is None:
                 tries[("_said", cmd)] = True
                 print(f"      cmd {cmd} is not in commands.json - trying, in order: "
@@ -608,6 +615,10 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             tries[("t", cmd, s["mv"])] = presses[-1]     # the press that worked
         if hit and decode(cmd) is None and used and used not in MOVE_CMDS.values():
             learned[cmd] = used
+        if hit and s.get("in_throw") and used:
+            tries["_throw_tok"] = used
+        elif hit and s.get("chain") and decode(cmd) is not None:
+            tries["_throw_tok"] = token(cmd)
         if not hit and s["mv"] is not None and ids:
             tries.setdefault("_miss", []).append((s["tok"], used, ids[0]))
         if not hit and used and decode(cmd) is None:
