@@ -1650,21 +1650,15 @@ def main():
                 for n_st, st in enumerate(steps):
                     tok = st[2]
                     if n_st:
-                        # Two conditions, both of which the match engine uses.
-                        # The game only buffers during a move's RECOVERY, so a
-                        # follow-up pressed while the previous one is still
-                        # active is dropped (the second P of HK,PPPP vanished
-                        # and the third started a fresh string). And the demo's
-                        # own gap is the floor.
-                        need_t = (dts_t[n_st] - 0.03) if n_st < len(dts_t) else 0.0
-                        t_w = time.perf_counter()
-                        while time.perf_counter() - t_w < 1.2:
-                            me.refresh()
-                            ready_t = (me.get("MoveKind") == 0
-                                       or me.get("Phase") >= PH_RECOVERY)
-                            if ready_t and time.perf_counter() - t_step >= need_t:
-                                break
-                            time.sleep(0.003)
+                        # The demo's own gap is the whole rule. Our side's
+                        # Phase field is not reliable, so waiting for RECOVERY
+                        # fell through to "MoveKind 0" - the end of the whole
+                        # move - and every follow-up went out after the string
+                        # had already dropped. That is the "super slow" four P's.
+                        need_t = (dts_t[n_st] - 0.03) if n_st < len(dts_t) else 0.15
+                        left_t = need_t - (time.perf_counter() - t_step)
+                        if left_t > 0:
+                            time.sleep(left_t)
                     before = me.get("CurrentMove")
                     if n_st and me.get("MoveKind") in (4, 5, 6):
                         # a throw or hold is playing: its window is at the END
@@ -1684,10 +1678,18 @@ def main():
                         combo_press(st)
                     t_step = time.perf_counter()
                     got, t_s = [], time.perf_counter()
+                    fr_b = me.get("CurrentMoveFrame")
                     while time.perf_counter() - t_s < 0.9:
                         me.refresh()
                         mv_n, k_n = me.get("CurrentMove"), me.get("MoveKind")
-                        if k_n != 0 and mv_n != before and (not got or got[-1] != mv_n):
+                        fr_n = me.get("CurrentMoveFrame")
+                        # the same id again IS a new move when its frame
+                        # counter restarts: a second P out of neutral is 176
+                        # again, and comparing ids alone printed "NOTHING CAME
+                        # OUT" for an input that did come out
+                        fresh = mv_n != before or (mv_n == before and fr_n < fr_b)
+                        fr_b = fr_n
+                        if k_n != 0 and fresh and (not got or got[-1] != mv_n):
                             got.append(int(mv_n))
                         # press the next token as soon as this one is out, the
                         # way the engine does. Waiting for neutral put the
