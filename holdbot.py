@@ -1108,8 +1108,6 @@ def main():
                 best = t
         return best
 
-    t_last_t = 0.0
-
     def press_best_throw(bt):
         """Each part goes in when the previous part's animation changes.
 
@@ -1126,7 +1124,7 @@ def main():
             # while a throw is playing, so a spare press costs nothing.
             mv_t = me.get("CurrentMove")
             t_t = time.perf_counter()
-            tries_t = 0
+            tries_t, t_last_t = 0, 0.0
             while time.perf_counter() - t_t < 1.1:
                 me.refresh()
                 if me.get("MoveKind") == 0:
