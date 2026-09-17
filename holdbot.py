@@ -1524,7 +1524,7 @@ def main():
     def pick_escape(ch, st_mv, cmd):
         """Same scoring as the throw answers: keep the guess for the
         CommandCode until it has failed twice, then the best (ok+1)/(n+2)."""
-        st = throw_esc.setdefault(f"cmd{cmd}", {})
+        st = throw_esc.setdefault(f"cmd{cmd or 0}", {})
         default = ESCAPE_GUESS.get(cmd, "T")
         d = st.get(default, [0, 0])
         if d[1] < 2 or (d[0] + 1) / (d[1] + 2) >= 0.5:
@@ -1563,7 +1563,7 @@ def main():
             if wait_failed[seq["st"]] == 2:
                 print(f"  !    {seq['st']}: standing for the break has cost us twice - "
                       f"answering it like a command throw from now on")
-        st = throw_esc.setdefault(f"cmd{seq['cmd']}", {})
+        st = throw_esc.setdefault(f"cmd{seq['cmd'] or 0}", {})
         st.setdefault(seq["opt"], [0, 0])
         st[seq["opt"]][0] += 1 if ok else 0
         st[seq["opt"]][1] += 1
@@ -3296,7 +3296,12 @@ def main():
             esc = {k: v for k, v in throw_esc.items() if k.startswith("cmd")}
             if esc:
                 print("  throw breaks learned by CommandCode (input: broken/tried):")
-                for key, opts in sorted(esc.items(), key=lambda kv: int(kv[0][3:])):
+                def _cmd_num(k):
+                    try:
+                        return int(k[3:])
+                    except ValueError:
+                        return -1          # "cmdNone": a grab whose start code was never read
+                for key, opts in sorted(esc.items(), key=lambda kv: _cmd_num(kv[0])):
                     print(f"    {key:<8} " + "  ".join(f"{o} {v[0]}/{v[1]}" for o, v in opts.items()))
             if oh_stats[0] or oh_stats[1]:
                 print(f"  offensive holds: {oh_stats[1]} learned this session, "
