@@ -1022,6 +1022,23 @@ def main():
              "seq": [], "opener": None}
     combo_stats = {"started": 0, "hits": 0, "dmg": 0, "by_len": {}}
 
+    def step_reach(step):
+        """How far this follow-up still connects. A plain P is the short one
+        (the number CHAR_PUNCH_REACH was measured for); S is Fatal Rush, which
+        runs the gap shut by itself (a P,S,S,S,S was cut at 155 and the S
+        would have hit), a kick reaches further than a punch, and a 6-move
+        steps in as it comes out."""
+        tok = step[2] if len(step) > 2 else "P"
+        base = CHAR_PUNCH_REACH.get(my_char, 150)
+        if "S" in tok:
+            return 400.0                 # Fatal Rush closes the distance
+        r = base
+        if "K" in tok:
+            r += 30
+        if tok[:1] == "6":
+            r += 40
+        return r
+
     def combo_press(step):
         (dx, dy), btn, tok, motion = (step + ([],))[:4]
         for mdx, mdy in motion:                      # 236P: tap 2, tap 3, then 6+P
@@ -2490,10 +2507,10 @@ def main():
                             combo_reset("no ground-throw window")
                     elif not foe_open and now - combo["t"] > 0.25:
                         combo_reset("they recovered" if kind == 0 else f"foe kind {kind}")
-                    elif ready and d_c > CHAR_PUNCH_REACH.get(my_char, 150):
+                    elif ready and nxt is not None and d_c > step_reach(nxt):
                         # P+K knocked them to 178: the PP after it can only
                         # whiff, and the whiff is what the CPU throws
-                        combo_reset(f"out of reach ({d_c:.0f})")
+                        combo_reset(f"{nxt[2]} out of reach ({d_c:.0f})")
                     elif ready or (foe_open and my_idle and d_c <= args.combo_range
                                    and now - combo["t"] > 0.03):
                         do_press = True
