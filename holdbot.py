@@ -1401,13 +1401,26 @@ def main():
                 inj.down(horiz)
                 time.sleep(0.020)          # a frame, or S alone = Fatal Rush
         vert = dirs_to_names(0, dy)
-        inj.down(vert + [button])
+        if vert and vert_lead[0]:
+            # "down alone one call early starts a crouch and H becomes a
+            # crouch guard" held for the characters this was measured on, but
+            # Minato's 1H came out as 4H 49 times in 112 (the catch animation
+            # was the mid-punch one), and her low holds fell to 47%. When that
+            # happens the vertical goes down WITH the horizontal instead, a
+            # frame before H - the same recipe her 3K needed.
+            inj.down(vert)
+            time.sleep(0.017)
+            inj.down([button])
+        else:
+            inj.down(vert + [button])
         pressed_at = time.perf_counter()
         time.sleep(args.press)
         inj.up([button])
         inj.up(vert + horiz)
         return pressed_at, flipped
 
+    vert_lead = [False]     # send the hold's vertical a frame early
+    wrong_hold = [0, 0]     # [low holds that caught with another hold, tried]
     pos_warn = [0.0]
     swap_ref = [None]       # unit vector foe-me (world XZ) frozen when a throw /
                             # hold throw / knockdown starts; compared when it ends
@@ -2040,6 +2053,18 @@ def main():
             by_kind.setdefault(e["kind"], [0, 0])[0] += 1
             if e["rem"] is not None:
                 by_rem.setdefault(e["rem"], [0, 0])[0] += 1
+        if e["kind"] == "low" and e["after"] is not None:
+            wrong_hold[1] += 1
+            # a catch animation (8xxx) on a low hold that did not land is the
+            # mid hold having come out: the "down" was dropped
+            if not ok and e["after"] >= 8000:
+                wrong_hold[0] += 1
+                if (not vert_lead[0] and wrong_hold[1] >= 15
+                        and wrong_hold[0] / wrong_hold[1] > 0.3):
+                    vert_lead[0] = True
+                    print(f"  !    low holds caught with the wrong animation "
+                          f"{wrong_hold[0]}/{wrong_hold[1]}: sending the hold's "
+                          f"DOWN a frame before H from here")
         elif e["after"] == e["mv0"]:
             no_reaction += 1
             if e["kind"] == "poke" and by_kind.get("poke", [0, 0])[1] > 0:
