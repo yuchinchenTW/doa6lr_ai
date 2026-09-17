@@ -73,7 +73,8 @@ LOW_THROW_CMDS = ()              # the direction guess (373 = 1T) was WRONG: 814
 THROWS_FILE = "throws.json"      # {char: {move: {"cmd": {code: n}, "hml": {v: n}}}}
 ANSWERS_FILE = "throw_answers.json"  # {char: {move: {"duck": [ok, n], "back": [..], "side": [..]}}}
 ESCAPES_FILE = "throw_escapes.json"  # {"cmd<CommandCode>": {"T": [ok, n], "6T": [..], "4T": [..], "2T": [..]}}
-TDMG_FILE = "throw_damage.json"  # {char: {move: damage this throw has cost us, all sessions}}
+TDMG_FILE = "throw_damage.json"  # {char: {move: {"dmg": what it has cost us, "hi": times it
+                                 #                 grabbed us out of our own attack}}}
 # ESCAPES_FILE is keyed by the throw's CommandCode, not (character, move): the break input
 # is the throw's own command, so every character's 6T is broken the same
 # way, and survival mode shows each character's throws only once or twice
@@ -1525,8 +1526,10 @@ def main():
         for mv_s, ent in throws_seen.get(str(fchar), {}).items():
             su = startup.get(fchar, int(mv_s))
             reach = ent.get("reach")
-            if reach is None or su is None or (
-                    su > 8 and throw_cost(fchar, int(mv_s)) < 300):
+            hi = throw_hi(fchar, int(mv_s))
+            if reach is None or (su is None and hi < 2) or (
+                    su is not None and su > 8 and hi < 2
+                    and throw_cost(fchar, int(mv_s)) < 300):
                 continue
             st = answer_stats(fchar, int(mv_s))
             n = sum(v[1] for v in st.values())
@@ -1534,7 +1537,7 @@ def main():
             # either nothing answers it, or it has simply cost us too much:
             # a multi-part command throw that lands one time in three still
             # takes a third of the bar with it
-            bad = (n >= 4 and ok / n < 0.3) or (
+            bad = (n >= 4 and ok / n < 0.3) or hi >= 2 or (
                 n >= 6 and ok / n < 0.6 and throw_cost(fchar, int(mv_s)) >= 300)
             if bad and (best is None or reach > best):
                 best, best_mv, best_su = reach, int(mv_s), su
@@ -1589,13 +1592,9 @@ def main():
         st[la["ans"]][0] += 1 if ok else 0
         st[la["ans"]][1] += 1
         if not ok and dmg > 0:
-            ent = throw_dmg.setdefault(str(fchar), {})
-            ent[str(la["mv"])] = ent.get(str(la["mv"]), 0) + int(dmg)
-            try:
-                with open(TDMG_FILE, "w", encoding="utf-8") as fh:
-                    json.dump(throw_dmg, fh, indent=1, sort_keys=True)
-            except OSError:
-                pass
+            ent = throw_ent(fchar, la["mv"])
+            ent["dmg"] = ent.get("dmg", 0) + int(dmg)
+            save_throw_dmg()
         # one grab from a three-part command throw costs 120: waiting for a
         # second failure before changing the answer pays for the lesson twice
         if not ok and (st[la["ans"]][1] >= 2 or dmg >= 60):
@@ -1616,8 +1615,31 @@ def main():
     except (OSError, ValueError):
         throw_dmg = {}
 
+    def throw_ent(ch, tmv):
+        ent = throw_dmg.setdefault(str(ch), {}).setdefault(str(tmv), {})
+        if not isinstance(ent, dict):                  # the first format was a bare int
+            ent = {"dmg": int(ent), "hi": 0}
+            throw_dmg[str(ch)][str(tmv)] = ent
+        return ent
+
     def throw_cost(ch, tmv):
-        return int(throw_dmg.get(str(ch), {}).get(str(tmv), 0))
+        return int(throw_ent(ch, tmv).get("dmg", 0))
+
+    def throw_hi(ch, tmv):
+        """How often this throw has caught us inside our own attack. Those
+        are hi-counter grabs: unbreakable, and the answer never gets to
+        start (char 7's 8108, 12 f and 85% against a duck, grabbed us twice
+        at frame 7 with 5 frames left because we were in the P+K recovery).
+        Nothing reactive fixes that - the poke has to stop happening in its
+        reach."""
+        return int(throw_ent(ch, tmv).get("hi", 0))
+
+    def save_throw_dmg():
+        try:
+            with open(TDMG_FILE, "w", encoding="utf-8") as fh:
+                json.dump(throw_dmg, fh, indent=1, sort_keys=True)
+        except OSError:
+            pass
 
     throw_cmd = {}          # foe throw startup move -> (cmd, hml) this session
     last_throw_start = [None, None, None]   # (move, cmd, hml) of the last kind-16 seen
@@ -1678,6 +1700,13 @@ def main():
         escape["seq"] = None
         ok = me.get("CurrentHealth") >= seq["hp0"]
         if seq.get("hi") and not ok:
+            ent = throw_ent(fchar, seq["st"])
+            ent["hi"] = ent.get("hi", 0) + 1
+            ent["dmg"] = ent.get("dmg", 0) + max(0, seq["hp0"] - me.get("CurrentHealth"))
+            save_throw_dmg()
+            if ent["hi"] == 2:
+                print(f"  !    {seq['st']} has grabbed us out of our own attack twice: "
+                      f"no more poking inside its reach (throw_damage.json)")
             # a hi-counter throw (it caught us inside our own attack: 8149
             # on our P after the run-up, 8284 on the 6P poke) cannot be
             # broken in DOA6 - the break input tells nothing here, and it
