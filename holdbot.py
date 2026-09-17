@@ -1625,8 +1625,19 @@ def main():
                 steps = parse_combo(text)
                 print(f"  {text}" + (f"  (run {run_n + 1})" if args.test_repeat > 1 else ""))
                 hp0 = foe.get("CurrentHealth")
-                for st in steps:
+                prev_tok = None
+                for n_st, st in enumerate(steps):
                     tok = st[2]
+                    if n_st and me.get("MoveKind") in (4, 5, 6):
+                        # a throw or hold is playing: the next part is taken
+                        # when its animation changes, not on a fixed delay.
+                        # Part 3 to 4 of the 214T chain is 0.48 s apart.
+                        mv_w, t_w = me.get("CurrentMove"), time.perf_counter()
+                        while time.perf_counter() - t_w < 0.9:
+                            me.refresh()
+                            if me.get("MoveKind") == 0 or me.get("CurrentMove") != mv_w:
+                                break
+                            time.sleep(0.003)
                     before = me.get("CurrentMove")
                     combo_press(st)
                     got, t_s = [], time.perf_counter()
@@ -1645,10 +1656,17 @@ def main():
                             break
                         time.sleep(0.002)
                     want = expect.get(tok)
+                    chain = tok == prev_tok and got
+                    prev_tok = tok
                     if tok.strip("0123456789") == "":
                         mark = "(stance entry, no button)"
                     elif not got:
                         mark = "NOTHING CAME OUT"
+                    elif chain:
+                        # the same token again continues a chain, and every
+                        # part has its own animation: 214T runs 8141 > 8156 >
+                        # 8158 > 8160, so only the first matches the table
+                        mark = f"ok (part {n_st + 1} of the chain)"
                     elif want is None:
                         mark = "(this token is not in the calibration)"
                     elif want in got:
