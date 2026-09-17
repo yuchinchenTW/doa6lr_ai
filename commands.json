@@ -1327,11 +1327,11 @@
     ]
    },
    "46K": {
-    "cmd": 1300,
-    "move": 8091,
+    "cmd": 1280,
+    "move": 8087,
     "ids": [
-     8091,
-     8022
+     8087,
+     8027
     ]
    },
    "64PK": {
@@ -1357,70 +1357,106 @@
      8130
     ]
    },
+   "6hP": {
+    "cmd": 1110,
+    "move": 177,
+    "ids": [
+     177,
+     8034
+    ]
+   },
+   "6hK": {
+    "cmd": 1280,
+    "move": 8087,
+    "ids": [
+     8087,
+     8027
+    ]
+   },
+   "6hPK": {
+    "cmd": 1380,
+    "move": 8103,
+    "ids": [
+     8103,
+     8023
+    ]
+   },
+   "6hHK": {
+    "cmd": 1420,
+    "move": 8110,
+    "ids": [
+     8110,
+     8034
+    ]
+   },
+   "6hS": {
+    "cmd": 5500,
+    "move": 8254,
+    "ids": [
+     8254
+    ]
+   },
+   "4hP": {
+    "cmd": 1150,
+    "move": 8071,
+    "ids": [
+     8071,
+     8027
+    ]
+   },
+   "4hK": {
+    "cmd": 1300,
+    "move": 8091,
+    "ids": [
+     8091,
+     8022
+    ]
+   },
+   "4hPK": {
+    "cmd": 1950,
+    "move": 8035,
+    "ids": [
+     8035
+    ]
+   },
+   "4hHK": {
+    "cmd": 1440,
+    "move": 8113,
+    "ids": [
+     8113,
+     8027
+    ]
+   },
+   "4hS": {
+    "cmd": 5500,
+    "move": 8254,
+    "ids": [
+     8254
+    ]
+   },
+   "4hbP": {
+    "cmd": 1150,
+    "move": 8071,
+    "ids": [
+     8071,
+     8027
+    ]
+   },
+   "6hbK": {
+    "cmd": 1280,
+    "move": 8087,
+    "ids": [
+     8087,
+     8027
+    ]
+   },
    "6hbPK": {
     "cmd": null,
     "move": null,
     "ids": []
    },
-   "4hbP": {
-    "cmd": null,
-    "move": null,
-    "ids": []
-   },
-   "6hbK": {
-    "cmd": null,
-    "move": null,
-    "ids": []
-   },
-   "6hP": {
-    "cmd": null,
-    "move": null,
-    "ids": []
-   },
-   "6hK": {
-    "cmd": null,
-    "move": null,
-    "ids": []
-   },
-   "6hPK": {
-    "cmd": null,
-    "move": null,
-    "ids": []
-   },
-   "6hHK": {
-    "cmd": null,
-    "move": null,
-    "ids": []
-   },
-   "6hS": {
-    "cmd": null,
-    "move": null,
-    "ids": []
-   },
-   "4hP": {
-    "cmd": null,
-    "move": null,
-    "ids": []
-   },
-   "4hK": {
-    "cmd": null,
-    "move": null,
-    "ids": []
-   },
-   "4hPK": {
-    "cmd": null,
-    "move": null,
-    "ids": []
-   },
-   "4hHK": {
-    "cmd": null,
-    "move": null,
-    "ids": []
-   },
-   "4hS": {
-    "cmd": null,
-    "move": null,
-    "ids": []
+   "_learned": {
+    "5900": "214P"
    }
   }
  }

@@ -49,6 +49,30 @@ BUTTON_KEY = {"P": "punch", "K": "kick", "PK": "pk", "HK": "hk", "S": "special",
 NUMPAD = {1: (-1, -1), 2: (0, -1), 3: (1, -1), 4: (-1, 0), 5: (0, 0),
           6: (1, 0), 7: (-1, 1), 8: (0, 1), 9: (1, 1)}
 IDLE_MOVES = (0, 1, 2, 3, 4)
+NEUTRAL_IDS = set()   # animation ids this character shows while MoveKind is 0
+
+
+def neutral(side):
+    """Is nothing of ours playing right now?
+
+    "CurrentMove in 0..4" is not the test. Minato DANCES on the spot: her
+    neutral cycles through 8019/8023/8027/8030/8034, so that check was never
+    true, the calibration timed out waiting for her to stand still, pressed
+    anyway and recorded the tail of the previous move (K read as
+    8023>179>8030 with cmd 1903). MoveKind 0 is what actually means neutral,
+    walking included."""
+    mv = side.get("CurrentMove")
+    if side.get("MoveKind") == 0:
+        NEUTRAL_IDS.add(int(mv))
+        return True
+    return False
+
+
+def live(side):
+    """A move of ours is playing (the inverse of neutral, id-aware so a move
+    that reads MoveKind 0 for a frame still counts)."""
+    mv = side.get("CurrentMove")
+    return not neutral(side) and mv not in IDLE_MOVES and mv not in NEUTRAL_IDS
 
 
 CMD_TABLE = {}      # cmd -> (token, button held)  from commands.json (--calibrate)
@@ -272,8 +296,8 @@ def record(sides, hot, rebind):
             print(f"  {now - started:6.3f}s  move {mv} (kind {me.get('MoveKind')})")
             last_mv = mv
         last_cmd = cmd
-        both_idle = (mv in IDLE_MOVES and me.get("MoveKind") == 0
-                     and foe.get("MoveKind") == 0 and foe.get("CurrentMove") in IDLE_MOVES + (127, 131, 135))
+        both_idle = (neutral(me) and (neutral(foe)
+                     or foe.get("CurrentMove") in (127, 131, 135)))
         if both_idle and now - started > 1.0:
             idle_since = idle_since or now
             if now - idle_since > 1.2:
@@ -409,7 +433,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             if from_idle:
                 while time.perf_counter() - t0 < 2.5:      # the demo waited for idle
                     me.refresh()
-                    if me.get("CurrentMove") in IDLE_MOVES and me.get("MoveKind") == 0:
+                    if neutral(me):
                         break
                     time.sleep(0.001)
                 time.sleep(0.03)
@@ -433,7 +457,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                     since = time.perf_counter() - t_prev_press
                     if since >= lead and (want_mv is None or mv == want_mv or mv not in IDLE_MOVES):
                         break
-                    if mv in IDLE_MOVES and me.get("MoveKind") == 0 and since > max(0.25, dt + 0.1):
+                    if neutral(me) and since > max(0.25, dt + 0.1):
                         break               # the string dropped: press anyway
                     time.sleep(0.001)
         d_now = None
@@ -496,7 +520,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                     break
             elif ids:
                 break
-            elif (not from_idle and mv in IDLE_MOVES and me.get("MoveKind") == 0
+            elif (not from_idle and neutral(me)
                   and time.perf_counter() - t1 > 0.2):
                 break                        # the previous move ended: follow-up missed
             elif (ok and used and not from_idle and again < max_again
@@ -569,11 +593,14 @@ def calibrate(sides, inj, facing_right, hot):
         t0 = time.perf_counter()
         while time.perf_counter() - t0 < 3.0:
             me.refresh()
-            if me.get("CurrentMove") in IDLE_MOVES and me.get("MoveKind") == 0:
+            if neutral(me):
                 break
             time.sleep(0.005)
         time.sleep(0.25)
         me.refresh()
+        if not neutral(me):          # still busy: the reading would be the
+            time.sleep(0.5)          # tail of the last move, give it longer
+            me.refresh()
         cmd0 = me.get("CommandCode")
         held = isinstance(digit, str) and digit.endswith("h")
         held_btn = isinstance(digit, str) and digit.endswith("hb")
@@ -614,7 +641,7 @@ def calibrate(sides, inj, facing_right, hot):
                 released = True
             me.refresh()
             c, m = me.get("CommandCode"), me.get("CurrentMove")
-            if m not in IDLE_MOVES:
+            if live(me):
                 if not ids:
                     got_cmd = int(c) if c else None
                 if not ids or ids[-1] != m:
@@ -693,7 +720,7 @@ def probe(sides, inj, facing_right, hot, want_cmd, btn="PK"):
         t0 = time.perf_counter()
         while time.perf_counter() - t0 < 3.0:
             me.refresh()
-            if me.get("CurrentMove") in IDLE_MOVES and me.get("MoveKind") == 0:
+            if neutral(me):
                 break
             time.sleep(0.005)
         time.sleep(0.3)
