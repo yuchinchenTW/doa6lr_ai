@@ -162,7 +162,11 @@ RECIPE_POOL = {
     # direction + button. 3K and 3P
     # collapse to 6K / 6P and 1P/7P to 4P, so the diagonals are not worth a
     # pool slot - 3KK is dropped for 6KK.
-    35: {"default": ["8K,P,P,P,P", "8P,P,P,P,P", "2PK,6K,K", "6P,P,P",
+    # 3P+K (move 8109) was added once the down-diagonal recipe made it
+    # reachable: the guide lists her launchers as 8K / 9P / 8P / 3P+K / 2P+K
+    # and the juggle off 8K, 8P and 3P+K as PPPP. Until 2026-09-18 a 3P+K
+    # input came out as 6P+K, so the guide's own combo was impossible.
+    35: {"default": ["8K,P,P,P,P", "8P,P,P,P,P", "3PK,P,P,P,P", "2PK,6K,K", "6P,P,P",
                      "P,K,K", "K,P", "4P,K", "6K,K", "66P", "236P",
                      "S,S,S,S", "S", "P"],
          176:       ["P,K,K", "P,P,P,P", "6P,P", "S,S,S,S", "P", "S"],
