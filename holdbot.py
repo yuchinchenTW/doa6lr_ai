@@ -41,7 +41,7 @@ import struct
 import sys
 import time
 
-from fields import STRIKE_TYPE, field_address, load_layout, locate_all
+from fields import STRIKE_TYPE, field_address, load_layout, locate_all, read_field
 from memlib import Process, find_pid
 from pad import (HOLD_DIRECTIONS, STRIKE_TO_HOLD, dirs_to_names,
                  disable_high_res_timer, enable_high_res_timer, guard, hold,
@@ -1966,6 +1966,8 @@ def main():
             frame_ms[0] = fm
             args.press = max(base_press, 1.3 * fm / 1000)
 
+    anchor_reject = [None]
+
     def refresh_anchors():
         """Survival / arcade: the next opponent is a NEW object, and often
         ours is re-created too. Walk the static pointer chains again; if
@@ -1979,6 +1981,25 @@ def main():
             return
         moved = [k for k in ("state", "state:P2", "pos") if new_an.get(k) != anchors.get(k)]
         if not moved:
+            return
+        # the chain once landed inside the exe image (0x7FF6...): char
+        # 32758, hp 59936, move 46176, kind 116 - and the bot stood there
+        # for a round being hit by a ghost. A fighter object has a small
+        # character id, a health bar and a small move kind: anything else
+        # is not a fighter, keep the anchors we have and look again later
+        try:
+            for side_name in ("P1", "P2"):
+                ch = read_field(proc, new_an, f"{side_name}_CurrentCharacter", layout)
+                hp = read_field(proc, new_an, f"{side_name}_CurrentHealth", layout)
+                mk = read_field(proc, new_an, f"{side_name}_MoveKind", layout)
+                if not (0 <= ch < 128 and 0 <= hp <= 2000 and 0 <= mk < 64):
+                    if anchor_reject[0] != new_an.get("state:P2"):
+                        anchor_reject[0] = new_an.get("state:P2")
+                        print(f"  [!] new anchors rejected: {side_name} reads char {ch} "
+                              f"hp {hp} kind {mk} at 0x{new_an.get('state:P2', 0):X} - "
+                              f"not a fighter object, keeping the old ones")
+                    return
+        except Exception:
             return
         anchors.update(new_an)
         for side_obj, side_name in ((me, me_side), (foe, foe_side)):
