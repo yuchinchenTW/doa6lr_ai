@@ -410,7 +410,7 @@ def plan(events):
     return steps
 
 
-def press(inj, tok_cmd, facing_right, hold=0.045, tok=None):
+def press(inj, tok_cmd, facing_right, hold=0.045, tok=None, dash_hold=0.13):
     if tok is not None:
         digits, btn = split_token(tok)
         held = False
@@ -439,7 +439,16 @@ def press(inj, tok_cmd, facing_right, hold=0.045, tok=None):
     # frame ahead, then the VERTICAL AND THE BUTTON IN ONE SendInput call.
     # A vertical sent on its own a frame early is read as a sidestep and
     # the button then comes out neutral (8P+K replayed as P+K, move 8119).
-    if horiz and vert and dy < 0:
+    dash = len(digits) >= 2 and digits[-1] == digits[-2]
+    if dash and horiz:
+        # A dash carries the move with it, and the run-up is most of the
+        # range. The demo held forward for 0.14 s before pressing; tapping
+        # and pressing 17 ms later produced the right move (8077) barely a
+        # step from where it started, and the 6P fell short of the post.
+        inj.down(horiz)
+        time.sleep(dash_hold)
+        inj.down(vert + [key])
+    elif horiz and vert and dy < 0:
         # A DOWN diagonal needs both directions in place before the button.
         # With the vertical sent alongside the button the game kept only the
         # horizontal: Minato's 3K came out as 6K (8087) and 1P/7P as 4P, while
@@ -601,8 +610,10 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             HELD_FWD.clear()
         else:
             hf = []
+        # a dash follows the demo's own run-up length
+        dh = max(0.06, min(0.30, s.get("dt") or 0.13)) if s["prev_mv"] in (1, 3, 5, 6) else 0.13
         if decode(cmd) is not None:
-            ok = press(inj, cmd, facing_right)
+            ok = press(inj, cmd, facing_right, dash_hold=dh)
             used = token(cmd)
         elif cmd in MOVE_CMDS:
             used = MOVE_CMDS[cmd]
@@ -637,7 +648,7 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                                         and results[-1][1] in results[-1][2])
                 if prev_ok:
                     tries[(cmd, s["mv"])] = n + 1
-                ok = press(inj, cmd, facing_right, tok=used)
+                ok = press(inj, cmd, facing_right, tok=used, dash_hold=dh)
             else:
                 ok = False
         if hf:
@@ -683,7 +694,8 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                 # "frame 1" is the game's own pre-loaded command, not a
                 # human timing. Press again every ~4 frames (holdbot's
                 # combo engine lands its strings this way)
-                press(inj, cmd, facing_right, tok=used if decode(cmd) is None else None)
+                press(inj, cmd, facing_right, tok=used if decode(cmd) is None else None,
+                      dash_hold=dh)
                 again += 1
                 t_last = time.perf_counter()
                 presses.append(t_last - t_prev_press)
