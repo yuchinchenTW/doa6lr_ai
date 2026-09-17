@@ -1655,8 +1655,13 @@ def main():
                         # fell through to "MoveKind 0" - the end of the whole
                         # move - and every follow-up went out after the string
                         # had already dropped. That is the "super slow" four P's.
-                        need_t = (dts_t[n_st] - 0.03) if n_st < len(dts_t) else 0.15
-                        left_t = need_t - (time.perf_counter() - t_step)
+                        # Start at HALF the demo's gap and let the re-presses
+                        # find the first frame the game will take. The demo
+                        # waits for the previous move to finish, but the buffer
+                        # opens in its RECOVERY - sleeping the whole 0.735 s
+                        # after H+K put the P visibly late.
+                        need_t = (dts_t[n_st] * 0.5) if n_st < len(dts_t) else 0.1
+                        left_t = max(0.04, need_t) - (time.perf_counter() - t_step)
                         if left_t > 0:
                             time.sleep(left_t)
                     before = me.get("CurrentMove")
@@ -1690,7 +1695,7 @@ def main():
                         # active frames is simply eaten, and one press per
                         # token left the second P of HK,PPPP missing every run
                         # while the replay's "+1 re-press" landed it.
-                        elif (not got and again_t < 6
+                        elif (not got and again_t < 12
                               and me.get("MoveKind") not in (4, 5, 6)
                               and time.perf_counter() - t_ag > 0.07):
                             combo_press(st)
@@ -2984,7 +2989,9 @@ def main():
                         # pressing as soon as the move appears loses the input
                         dts = cc_dt.get(combo.get("recipe"))
                         if dts and combo["i"] < len(dts):
-                            need = dts[combo["i"]] - 0.05
+                            # half the demo's gap: the engine re-presses too,
+                            # and the buffer opens in the recovery
+                            need = dts[combo["i"]] * 0.5
                             if need > 0.05 and now - combo["t"] < need:
                                 do_press = False
                     elif (my_type_now in (MT_HIT, MT_THROWN, MT_HOLD_HIT, 7)
