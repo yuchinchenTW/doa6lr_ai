@@ -2904,9 +2904,13 @@ def main():
                                     and time.perf_counter() - t_press > 0.050):
                                 inj.up(key[-1:]); time.sleep(0.005); inj.down(key[-1:])
                                 down_again = True         # walking, not crouching: down again
-                            elif mm in FWD_IDS and key and not flipped_d:
+                            elif mm in FWD_IDS + (16, 17, 18) and key and not flipped_d:
                                 # that was down+forward: the facing guess is
                                 # stale (usual after a throw). Other side.
+                                # 16/17/18 are the forward-step states (the
+                                # calibration read move 18 / cmd 17 while 6
+                                # was held): "ours: 2>0>17" grabbed us for
+                                # weeks without the flip firing
                                 inj.up(key)
                                 facing_state[0] = not facing_state[0]
                                 facing_fixes[0] += 1
