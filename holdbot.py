@@ -1678,19 +1678,24 @@ def main():
                         combo_press(st)
                     t_step = time.perf_counter()
                     got, t_s = [], time.perf_counter()
-                    fr_b = me.get("CurrentMoveFrame")
+                    again_t, t_ag = 0, time.perf_counter()
                     while time.perf_counter() - t_s < 0.9:
                         me.refresh()
                         mv_n, k_n = me.get("CurrentMove"), me.get("MoveKind")
-                        fr_n = me.get("CurrentMoveFrame")
-                        # the same id again IS a new move when its frame
-                        # counter restarts: a second P out of neutral is 176
-                        # again, and comparing ids alone printed "NOTHING CAME
-                        # OUT" for an input that did come out
-                        fresh = mv_n != before or (mv_n == before and fr_n < fr_b)
-                        fr_b = fr_n
+                        fresh = mv_n != before
                         if k_n != 0 and fresh and (not got or got[-1] != mv_n):
                             got.append(int(mv_n))
+                        # Nothing out yet: press again, the way comboreplay
+                        # does. A follow-up that lands in the previous move's
+                        # active frames is simply eaten, and one press per
+                        # token left the second P of HK,PPPP missing every run
+                        # while the replay's "+1 re-press" landed it.
+                        elif (not got and again_t < 6
+                              and me.get("MoveKind") not in (4, 5, 6)
+                              and time.perf_counter() - t_ag > 0.07):
+                            combo_press(st)
+                            again_t += 1
+                            t_ag = time.perf_counter()
                         # press the next token as soon as this one is out, the
                         # way the engine does. Waiting for neutral put the
                         # second part of a four-part throw 0.9 s late, where
@@ -1701,6 +1706,10 @@ def main():
                             break
                         time.sleep(0.002)
                     want = expect.get(tok)
+                    if again_t:
+                        tok_show = f"{tok}(+{again_t})"
+                    else:
+                        tok_show = tok
                     chain = tok == prev_tok and got
                     prev_tok = tok
                     if tok.strip("0123456789") == "":
@@ -1718,7 +1727,7 @@ def main():
                         mark = "ok"
                     else:
                         mark = f"WRONG - expected {want}"
-                    print(f"      {tok:<6} -> {'>'.join(map(str, got)) or '-':<22} {mark}")
+                    print(f"      {tok_show:<8} -> {'>'.join(map(str, got)) or '-':<22} {mark}")
                 dealt = hp0 - foe.get("CurrentHealth")
                 print(f"      damage to the dummy: {dealt if 0 <= dealt < 500 else '?'}\n")
                 time.sleep(1.0)
