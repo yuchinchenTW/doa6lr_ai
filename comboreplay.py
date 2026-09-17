@@ -35,7 +35,6 @@ import time
 from fields import load_layout, locate_all
 from holdbot import Side
 from memlib import Process, find_pid
-from inputs import press_token
 from pad import KeyboardInjector, dirs_to_names
 
 u32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -466,21 +465,61 @@ def plan(events):
 
 def press(inj, tok_cmd, facing_right, hold=0.045, tok=None, dash_hold=0.13,
           dir_lead=0.017):
-    """One token through the shared recipe in inputs.py (see the note there).
-
-    dash_hold/dir_lead are kept in the signature for the callers that pass
-    them; the shared recipe derives both, so they are advisory now."""
-    if tok is None:
+    if tok is not None:
+        digits, btn = split_token(tok)
+        held = False
+    else:
         d = decode(tok_cmd)
         if d is None:
             return False
         digits, btn, held = d
-        tok = "".join(str(x) for x in digits) + btn
+    if held:
+        hold = 0.7                  # a charged version: keep the button down
+    # a motion (46P+K): tap every direction but the last, 2 frames each
+    for dg in digits[:-1]:
+        ddx, ddy = NUMPAD.get(dg, (0, 0))
+        if not facing_right:
+            ddx = -ddx
+        names = dirs_to_names(ddx, ddy)
+        inj.down(names); time.sleep(0.033); inj.up(names); time.sleep(0.017)
+    digit = digits[-1] if digits else 0
+    dx, dy = NUMPAD.get(digit, (0, 0)) if digit else (0, 0)
+    if not facing_right:
+        dx = -dx
+    key = BUTTON_KEY[btn]
+    horiz = dirs_to_names(dx, 0)
+    vert = dirs_to_names(0, dy)
+    # The recipe the diagonal holds (7H / 1H) land with: the horizontal a
+    # frame ahead, then the VERTICAL AND THE BUTTON IN ONE SendInput call.
+    # A vertical sent on its own a frame early is read as a sidestep and
+    # the button then comes out neutral (8P+K replayed as P+K, move 8119).
+    dash = len(digits) >= 2 and digits[-1] == digits[-2]
+    if dash and horiz:
+        # A dash carries the move with it, and the run-up is most of the
+        # range. The demo held forward for 0.14 s before pressing; tapping
+        # and pressing 17 ms later produced the right move (8077) barely a
+        # step from where it started, and the 6P fell short of the post.
+        inj.down(horiz)
+        time.sleep(dash_hold)
+        inj.down(vert + [key])
+    elif horiz and vert and dy < 0:
+        # A DOWN diagonal needs both directions in place before the button.
+        # With the vertical sent alongside the button the game kept only the
+        # horizontal: Minato's 3K came out as 6K (8087) and 1P/7P as 4P, while
+        # the UP diagonals (9P 188, 9K 189) were fine. Combo Challenge stage 6
+        # opens with 3K, move 180, which no other input produces.
+        inj.down(horiz + vert)
+        time.sleep(0.05)
+        inj.down([key])
     else:
-        held = False
-    return press_token(inj, tok, facing_right=facing_right, hold=hold,
-                       distance=dash_hold * 1100.0 if dash_hold else None,
-                       in_string=dir_lead >= 0.04, held=held)
+        if horiz:
+            inj.down(horiz)
+            time.sleep(dir_lead)
+        inj.down(vert + [key])
+    time.sleep(hold)
+    inj.up([key])
+    inj.up(vert + horiz)
+    return True
 
 
 MOVE_CMDS = {9: "66", 4: "44"}      # dashes seen in a demo (moves 3 / 5)
@@ -808,31 +847,12 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         # never appears as a step, but without it holdbot's P,P,P,6P is just
         # the fourth P of the string. "4" goes into the sequence where the
         # recording saw the kind-13 transition.
-        # The demo's own interval before each input goes with it: H+K runs
-        # 0.72 s and its follow-up P is pressed after that, while a string
-        # branch comes 0.19 s in. Without the timing holdbot presses as soon as
-        # the previous move appears and the input is eaten.
-        seq, dts, mvs, carry = [], [], [], 0.0
+        seq = []
         for st_i, tk in zip(steps, step_tokens):
             if st_i.get("stance_before"):
                 seq.append(STANCE_TOKEN)
-                dts.append(0.0)
-                mvs.append(None)
             if tk:
                 seq.append(tk)
-                dts.append(round((st_i.get("dt") or 0.0) + carry, 3))
-                # the move the DEMO produced, which is what "correct" means:
-                # the second input of 3K,K,66P makes 8093, the string's second
-                # hit, and a standalone K (179) is the combo having dropped
-                mvs.append(st_i.get("mv"))
-                carry = 0.0
-            else:
-                # a skipped step (the demo walking in) still took time, and
-                # the next input's gap is measured from IT. Dropping that time
-                # fired 3K,K,66P's dash 0.16 s after the previous hit instead
-                # of 0.96 s, while the character was still in recovery - no
-                # dash starts there, so 66P came out as a plain 6P.
-                carry += st_i.get("dt") or 0.0
         # Everything is saved, throws included: holdbot skips a throw-led
         # sequence when picking a combo recipe (a character in hit stun cannot
         # be grabbed) and uses the longest one where it has decided to throw
@@ -848,22 +868,14 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                 cc = {}
             lst = cc.setdefault(str(ch), [])
             have = [e["seq"] if isinstance(e, dict) else e for e in lst]
-            if text in have:
-                i_e = have.index(text)
-                if isinstance(lst[i_e], dict):
-                    lst[i_e]["dt"] = dts
-                    lst[i_e]["mv"] = mvs
-                else:
-                    lst[i_e] = {"seq": text, "dt": dts, "mv": mvs}
+            if text not in have:
+                lst.append(text)
                 with open(CC_FILE, "w", encoding="utf-8") as fh:
                     json.dump(cc, fh, indent=1, sort_keys=True)
-                print(f"  \"{text}\" already in {CC_FILE} - timing refreshed")
+                print(f"  saved \"{text}\" to {CC_FILE} - holdbot will try it "
+                      f"for character {ch}")
             else:
-                lst.append({"seq": text, "dt": dts, "mv": mvs})
-                with open(CC_FILE, "w", encoding="utf-8") as fh:
-                    json.dump(cc, fh, indent=1, sort_keys=True)
-                print(f"  saved \"{text}\" to {CC_FILE} with its timing - "
-                      f"holdbot will try it for character {ch}")
+                print(f"  \"{text}\" is already in {CC_FILE}")
     for nm, cmd_m, mv_m, used_m in misses:
         bad = tries.get("_bad", {}).get(cmd_m, set())
         cands = [c for c in candidates(cmd_m, mv_m) if c not in bad]
