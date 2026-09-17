@@ -764,8 +764,14 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                   and time.perf_counter() - t1 > 0.2):
                 break                        # the previous move ended: follow-up missed
             elif (ok and used and not from_idle and again < max_again
+                  and mv != prev
                   and not (i + 1 < len(steps) and steps[i + 1].get("stance_before"))
                   and time.perf_counter() - t_last > (0.12 if max_again == 1 else 0.07)):
+                # only when we are actually standing around: while the PREVIOUS
+                # move is still playing the press is merely buffered, and
+                # pressing again adds a hit. Three spare P's after the 8P
+                # turned a PP into a PPP and entered the wrong stance (8118
+                # instead of 8053).
                 # no safety re-press before a stance entry: the spare hit came
                 # out as the fourth P (8047) and the back tap then had nothing
                 # to transition from
