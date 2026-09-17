@@ -158,7 +158,10 @@ CHAR_POKE = {21: "pk",           # P+K is her poke; P (14 f, +1 on hit) is not
              # 9 f but -5 on hit, 6P 11 f is -11 on a normal hit. 8P (17 f,
              # rising mid punch) gives a +29 lift stun on a NORMAL hit and
              # needs only up + P, which the keyboard sends reliably.
-             31: "8P"}
+             # ...but 8P as a poke came out as a sidestep 3 of 7 times in a
+             # match (up alone = free step) and landed 1/7. 6P (11 f, mid,
+             # +20 stun on counter hit) is the reliable horizontal.
+             31: "6P"}
 GENERIC_COMBO = "P,P,P,K"
 CHAR_NAMES = {21: "Nyotengu", 30: "Mai", 31: "Kula"}
 CHAR_PUNCH_REACH = {31: 105}     # how far the standing P punish still lands
@@ -2826,7 +2829,12 @@ def main():
                         # times); down+back is the crouch (10 -> 13). Unless
                         # this throw has shown it grabs crouchers: then the
                         # table says back or side.
-                        answer = pick_answer(fchar, mv, "duck")
+                        # a fast throw (<= 8 f to the grab) beats the crouch
+                        # walk every time (8137 1/14, 8004 0/6) but not the
+                        # low kick's instant crouching status (8137 6/6,
+                        # 8003 4/4): start those on the low kick
+                        fast = t_known is not None and t_known <= 8
+                        answer = pick_answer(fchar, mv, "lowkick" if fast else "duck")
                     else:
                         answer = pick_answer(fchar, mv, "back")
                 if answer in ("back", "side", "duck", "lowkick", "hopkick"):
@@ -2983,7 +2991,7 @@ def main():
                 continue
 
             if (mv in oh_seen.get(str(fchar), ()) and ph == PH_STARTUP
-                    and not args.dry_run and dist <= 200):
+                    and not args.dry_run and dist <= 260):   # 8021 (a running OH) from 231
                 # an offensive hold beats holds. What else it beats differs
                 # per move: 8009 grabbed a sidestep, then HIT a croucher (198
                 # dmg), so the answer is learned per move like the throws:
