@@ -749,7 +749,11 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                   and time.perf_counter() - t1 > 0.2):
                 break                        # the previous move ended: follow-up missed
             elif (ok and used and not from_idle and again < max_again
+                  and not (i + 1 < len(steps) and steps[i + 1].get("stance_before"))
                   and time.perf_counter() - t_last > (0.12 if max_again == 1 else 0.07)):
+                # no safety re-press before a stance entry: the spare hit came
+                # out as the fourth P (8047) and the back tap then had nothing
+                # to transition from
                 # a string follow-up the game did not take yet: the demo's
                 # "frame 1" is the game's own pre-loaded command, not a
                 # human timing. Press again every ~4 frames (holdbot's
