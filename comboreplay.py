@@ -203,7 +203,8 @@ RECIPE_TOKENS = {"236": "236", "214": "214", "33": "33", "22": "22", "44": "44",
 FAMILY = {10: "P", 11: "K", 55: "S", 50: "S", 57: "PK"}   # 13xx / 20xx were stance and hit follow-ups
 
 
-def candidates(cmd, want_mv=None, in_throw=False, after_walk=False, follow_up=False):
+def candidates(cmd, want_mv=None, in_throw=False, after_walk=False, follow_up=False,
+               in_stance=False):
     """What to try for a code we never produced ourselves. The demo of one
     stage showed the hundreds are NOT a reliable button family (1083 and
     1085 were P+K after a hit, 1350-1353 P / K inside a stance), so: the
@@ -234,6 +235,12 @@ def candidates(cmd, want_mv=None, in_throw=False, after_walk=False, follow_up=Fa
         for b in ("66P", "66K", "66PK", "66HK", "33P", "33K"):
             if b not in out:
                 out.append(b)
+    if in_stance:
+        # entering or acting out of a stance: the guide's entries are a move
+        # with a direction (PP>4K) and its options are plain buttons
+        for b_ in ("4K", "K", "4P", "P", "6K", "2K", "PK", "HK", "6P", "2P"):
+            if b_ not in out:
+                out.append(b_)
     if follow_up:
         # A string continuation is numbered in its own space: PPPP runs
         # 1000/1001/1002/1003, and Minato's PPP>4P read 5701 while her
@@ -366,20 +373,18 @@ def record(sides, hot, rebind):
         # 8160. So they are inputs, and they are recorded like any other.
         # What IS an echo is the code that arrives as we drop back into the
         # dance (MoveKind 0 on a neutral id).
-        if kind_now == 13 and cmd != last_cmd:
-            # MoveKind 13 is a stance transition, not a move of ours. Minato's
-            # 4P slides straight into the Minato Shuffle (move 8118) and the
-            # game writes its own code for that (5701), which the replay then
-            # tried to press: the screen's task is "P P 4P, in the Shuffle,
-            # 6P" - four inputs, and this is not one of them. The move itself
-            # is kept so the chain still shows the stance.
-            last_cmd = cmd
-            if mv != last_mv:
-                events.append({"t": round(now - started, 3), "mv": int(mv),
-                               "kind": int(kind_now), "stance": True})
-                print(f"  {now - started:6.3f}s  move {mv} (kind 13, stance - "
-                      f"not an input)")
-                last_mv = mv
+        if kind_now == 13 and cmd == last_cmd and mv != last_mv:
+            # A stance reached with NO code is entered by a bare direction
+            # (the guide's 6PP4 / KP4 / PPP4): nothing to press, so the next
+            # input is marked instead. A stance reached WITH a code was
+            # entered by a button - Minato's PP>4K slides into the Shuffle -
+            # and suppressing every code here deleted that input and made the
+            # entry look automatic.
+            events.append({"t": round(now - started, 3), "mv": int(mv),
+                           "kind": int(kind_now), "stance": True})
+            print(f"  {now - started:6.3f}s  move {mv} (kind 13, stance entered "
+                  f"by a bare direction)")
+            last_mv = mv
             time.sleep(0.001)
             continue
         if kind_now in (5, 6) and cmd != last_cmd:
@@ -438,8 +443,10 @@ def plan(events):
             continue
         dt = None if t_prev is None else round(e["t"] - t_prev, 3)
         t_prev = e["t"]
-        produced, chain = None, []
+        produced, chain, stance_kind = None, [], None
         for f in events[i + 1:]:
+            if "mv" in f and f.get("kind") == 13 and produced is None:
+                stance_kind = 13
             if "mv" in f and f["mv"] not in IDLE_MOVES:
                 if produced is None:
                     produced = f["mv"]
@@ -450,7 +457,8 @@ def plan(events):
         steps.append({"tok": e["tok"], "cmd": e["cmd"], "prev_mv": e["prev_mv"],
                       "prev_fr": e["prev_fr"], "mv": produced, "dist": e.get("dist"),
                       "dt": dt, "chain": chain, "in_throw": e.get("in_throw", False),
-                      "stance_before": stance_pending})
+                      "stance_before": stance_pending,
+                      "stance_kind": stance_kind})
         stance_pending = False
     return steps
 
@@ -694,7 +702,8 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
         else:
             cands = candidates(cmd, s["mv"], s.get("in_throw", False),
                                after_walk=s["prev_mv"] in (1, 3, 5, 6),
-                               follow_up=not from_idle)
+                               follow_up=not from_idle,
+                               in_stance=s.get("stance_kind") == 13)
             prev_tok = step_tokens[-1] if step_tokens else None
             if (prev_tok and i and cmd == steps[i - 1]["cmd"] + 1
                     and tries.get((cmd, s["mv"]), 0) == 0):
