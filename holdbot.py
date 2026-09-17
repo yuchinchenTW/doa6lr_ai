@@ -1143,13 +1143,21 @@ def main():
             if quiet < 0.10:                           # let the 4/6 buffer expire
                 time.sleep(0.10 - quiet)
         horiz, vert = dirs_to_names(sdx, 0), dirs_to_names(0, dy)
-        if horiz:
-            inj.down(horiz)            # 6P/4P and the horizontal half of a
-            time.sleep(0.017)          # diagonal: a frame ahead
-        # the vertical goes down WITH the button (down alone a frame ahead is
-        # a sidestep: 2T came out as id 32). This is the recipe the
-        # calibration landed 3K / 7P / 1P / 8P with.
-        inj.down(vert + [btn])
+        if horiz and vert and dy < 0:
+            # A DOWN diagonal needs both directions in place before the
+            # button. Sent alongside it the game kept only the horizontal:
+            # Minato's 3K came out as 6K and 1P/7P as 4P, while the UP
+            # diagonals (9P, 9K) were fine.
+            inj.down(horiz + vert)
+            time.sleep(0.05)
+            inj.down([btn])
+        else:
+            if horiz:
+                inj.down(horiz)        # 6P/4P and the horizontal half of an
+                time.sleep(0.017)      # up-diagonal: a frame ahead
+            # the vertical goes down WITH the button (down alone a frame ahead
+            # is a sidestep: 2T came out as id 32)
+            inj.down(vert + [btn])
         time.sleep(args.press)
         inj.up([btn])
         if names:

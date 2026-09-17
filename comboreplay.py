@@ -439,10 +439,20 @@ def press(inj, tok_cmd, facing_right, hold=0.045, tok=None):
     # frame ahead, then the VERTICAL AND THE BUTTON IN ONE SendInput call.
     # A vertical sent on its own a frame early is read as a sidestep and
     # the button then comes out neutral (8P+K replayed as P+K, move 8119).
-    if horiz:
-        inj.down(horiz)
-        time.sleep(0.017)
-    inj.down(vert + [key])
+    if horiz and vert and dy < 0:
+        # A DOWN diagonal needs both directions in place before the button.
+        # With the vertical sent alongside the button the game kept only the
+        # horizontal: Minato's 3K came out as 6K (8087) and 1P/7P as 4P, while
+        # the UP diagonals (9P 188, 9K 189) were fine. Combo Challenge stage 6
+        # opens with 3K, move 180, which no other input produces.
+        inj.down(horiz + vert)
+        time.sleep(0.05)
+        inj.down([key])
+    else:
+        if horiz:
+            inj.down(horiz)
+            time.sleep(0.017)
+        inj.down(vert + [key])
     time.sleep(hold)
     inj.up([key])
     inj.up(vert + horiz)
