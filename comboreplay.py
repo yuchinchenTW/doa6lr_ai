@@ -176,6 +176,9 @@ def decode(cmd):
 # family it belongs to (1350..1353 were the hits of an H+K string, 1083 and
 # 1085 P-family follow-ups, 5000..5002 and 5510 S-family). Candidates are
 # tried in order across replays until one produces the demo's move id.
+# probe recipe name -> the token that means the same thing
+RECIPE_TOKENS = {"236": "236", "214": "214", "33": "33", "22": "22", "44": "44",
+                 "41236": "41236", "2": "2", "8": "8", "1": "1", "3": "3"}
 FAMILY = {10: "P", 11: "K", 55: "S", 50: "S", 57: "PK"}   # 13xx / 20xx were stance and hit follow-ups
 
 
@@ -720,6 +723,7 @@ def probe(sides, inj, facing_right, hot, want_cmd, btn="PK"):
     key = BUTTON_KEY[btn]
     f, b = dirs_to_names(1 if facing_right else -1, 0), dirs_to_names(-1 if facing_right else 1, 0)
     log = {"cmds": [], "ids": []}
+    saved = False
 
     def sample():
         me.refresh()
@@ -785,6 +789,25 @@ def probe(sides, inj, facing_right, hot, want_cmd, btn="PK"):
         mark = "  <== MATCH" if want_cmd in log["cmds"] else ""
         print(f"  {name:<32} -> cmds {'>'.join(map(str, log['cmds'])) or None}  "
               f"moves {'>'.join(map(str, log['ids'])) or None}{mark}")
+        if mark and not saved:
+            # a recipe whose name maps to a token can be written straight into
+            # the character's table, so the replay never has to guess again
+            digits = RECIPE_TOKENS.get(name.split(" ")[0])
+            if digits:
+                i = log["cmds"].index(want_cmd)
+                ids = [m for m in log["ids"]][max(0, i - 1):]
+                tok = f"{digits}{btn}"
+                tab = read_commands()
+                ch = me.get("CurrentCharacter")
+                sec = (tab.setdefault("chars", {}).setdefault(str(ch), {})
+                       if ch is not None else tab)
+                sec[tok] = {"cmd": int(want_cmd), "move": ids[0] if ids else None,
+                            "ids": ids}
+                with open("commands.json", "w", encoding="utf-8") as fh:
+                    json.dump(tab, fh, indent=1)
+                print(f"      saved {tok} = cmd {want_cmd} for character {ch} "
+                      f"(commands.json)")
+                saved = True
         time.sleep(0.5)
 
 
