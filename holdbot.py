@@ -502,6 +502,15 @@ def main():
                     help="do not print the per-frame trace of holds that "
                          "failed without producing a hold animation")
     ap.add_argument("--probe", action="store_true")
+    ap.add_argument("--test-combo", default=None, metavar="STRING",
+                    help="Training-mode check: press this comma string (or "
+                         "'all' for every one in the character's pool and in "
+                         "combo_challenge.json) through the same input code a "
+                         "match uses, and print the move id each token "
+                         "produced against what the calibration expects. "
+                         "Nothing else runs.")
+    ap.add_argument("--test-repeat", type=int, default=1,
+                    help="how many times to run each string in --test-combo")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -1564,6 +1573,75 @@ def main():
     inj.down, inj.up = _down, _up
     print(f"injector: {type(inj).__name__}"
           f"{'  (DRY RUN)' if args.dry_run else ''}")
+    if args.test_combo:
+        # ---- Training-mode check -------------------------------------------
+        # Uses combo_press, the same code a match uses, so what this prints is
+        # what the bot actually does. Expected ids come from the character's
+        # own calibration table in commands.json.
+        try:
+            with open("commands.json", encoding="utf-8") as fh:
+                _cm = json.load(fh)
+            _sec = (_cm.get("chars") or {}).get(str(my_char), {})
+        except (OSError, ValueError):
+            _sec = {}
+        expect = {k: v.get("move") for k, v in _sec.items()
+                  if isinstance(v, dict) and v.get("move")}
+
+        if args.test_combo == "all":
+            strings = list(RECIPE_POOL.get(my_char, GENERIC_POOL).get("default") or [])
+            for t, _w in cc_all(my_char):
+                if t not in strings:
+                    strings.append(t)
+        else:
+            strings = [args.test_combo]
+
+        print(f"test-combo: {len(strings)} string(s) for "
+              f"{CHAR_NAMES.get(my_char, my_char)}. Stand in Training with the "
+              f"dummy in front of you. Ctrl-C to stop.\n")
+        for text in strings:
+            for run_n in range(args.test_repeat):
+                t_wait = time.perf_counter()
+                while time.perf_counter() - t_wait < 4.0:     # both on their feet
+                    me.refresh(); foe.refresh()
+                    if (me.get("MoveKind") == 0 and foe.get("MoveKind") == 0
+                            and me.get("CurrentMoveFrame") >= 0):
+                        break
+                    time.sleep(0.005)
+                time.sleep(0.25)
+                steps = parse_combo(text)
+                print(f"  {text}" + (f"  (run {run_n + 1})" if args.test_repeat > 1 else ""))
+                hp0 = foe.get("CurrentHealth")
+                for st in steps:
+                    tok = st[2]
+                    before = me.get("CurrentMove")
+                    combo_press(st)
+                    got, t_s = [], time.perf_counter()
+                    while time.perf_counter() - t_s < 0.9:
+                        me.refresh()
+                        mv_n, k_n = me.get("CurrentMove"), me.get("MoveKind")
+                        if k_n != 0 and mv_n != before and (not got or got[-1] != mv_n):
+                            got.append(int(mv_n))
+                        if got and k_n == 0:
+                            break
+                        time.sleep(0.002)
+                    want = expect.get(tok)
+                    if tok.strip("0123456789") == "":
+                        mark = "(stance entry, no button)"
+                    elif not got:
+                        mark = "NOTHING CAME OUT"
+                    elif want is None:
+                        mark = "(this token is not in the calibration)"
+                    elif want in got:
+                        mark = "ok"
+                    else:
+                        mark = f"WRONG - expected {want}"
+                    print(f"      {tok:<6} -> {'>'.join(map(str, got)) or '-':<22} {mark}")
+                dealt = hp0 - foe.get("CurrentHealth")
+                print(f"      damage to the dummy: {dealt if 0 <= dealt < 500 else '?'}\n")
+                time.sleep(1.0)
+        inj.release_all()
+        return
+
     print("running. ctrl-c to stop\n")
 
     armed = True
