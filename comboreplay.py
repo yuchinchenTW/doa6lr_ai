@@ -240,6 +240,7 @@ def record(sides, hot, rebind):
     me = foe = None
     seen = {}
     t_bind = 0.0
+    throw_until = 0.0
     while True:
         for k in hot.pressed():
             if k == "F10":
@@ -283,6 +284,20 @@ def record(sides, hot, rebind):
                 continue
         me.refresh(); foe.refresh()
         cmd, mv, fr = me.get("CommandCode"), me.get("CurrentMove"), me.get("CurrentMoveFrame")
+        kind_now = me.get("MoveKind")
+        # While a throw executes (MoveKind 4) the game writes its own numbers
+        # into CommandCode, in lockstep with the animation: Minato's stage 1
+        # read as cmd 2030/2032/2034 against moves 8156/8158/8160, both
+        # climbing by 2, and the replay then tried to press four inputs for
+        # what is one throw. Nothing can be input during a throw anyway.
+        # A code that arrives with the character back in neutral (kind 0) is
+        # the same kind of echo.
+        if kind_now == 4:
+            throw_until = now + 0.35          # and the echo lingers past the end
+        if kind_now == 4 or now < throw_until:
+            last_cmd, last_mv = cmd, mv
+            time.sleep(0.001)
+            continue
         if cmd != last_cmd and cmd:
             d_in = distance(me, foe)
             events.append({"t": round(now - started, 3), "cmd": int(cmd), "tok": token(cmd),
@@ -384,6 +399,7 @@ def close_in(me, foe, inj, facing_right, want, timeout=2.5):
     fwd = dirs_to_names(1 if facing_right else -1, 0)
     inj.down(fwd)
     t0 = time.perf_counter()
+    d0 = d
     flipped = False
     d_start, t_gain = d, time.perf_counter()
     while time.perf_counter() - t0 < timeout:
@@ -397,6 +413,12 @@ def close_in(me, foe, inj, facing_right, want, timeout=2.5):
             inj.up(fwd)                          # walking away: mirrored
             fwd = dirs_to_names(-1 if facing_right else 1, 0)
             inj.down(fwd)
+            flipped = True
+        if (not flipped and d0 is not None and time.perf_counter() - t0 > 0.4
+                and d is not None and d > d0 - 8):
+            inj.up(fwd)                          # 0.4 s of walking and no
+            fwd = dirs_to_names(-1 if facing_right else 1, 0)   # ground gained:
+            inj.down(fwd)                        # we are walking away from it
             flipped = True
         d = distance(me, foe)
         if d is not None and d <= want + 3:
@@ -574,7 +596,10 @@ def calibrate(sides, inj, facing_right, hot):
     order = [(0, b) for b in ("P", "K", "PK", "HK", "S", "T")]
     for d in (6, 4, 2, 8, 3, 9, 1, 7):
         order += [(d, b) for b in ("P", "K", "PK", "HK", "S")]
-    order += [(d, "T") for d in (6, 4, 2)]     # the throw-break inputs holdbot uses
+    # every direction with T: holdbot needs the break inputs, and a Combo
+    # Challenge stage can be a single directional throw (Minato's first is
+    # cmd 403, which none of 400/401/402/404 covered)
+    order += [(d, "T") for d in (6, 4, 2, 8, 3, 9, 1, 7)]
     order += [("46", b) for b in ("PK", "P", "K")] + [("64", "PK"), ("236", "P"), ("214", "P")]
     order += [("6hb", "PK"), ("4hb", "P"), ("6hb", "K")]   # BUTTON held 1 s
     # "hold the direction" commands (the screen said hold left/right + P+K
