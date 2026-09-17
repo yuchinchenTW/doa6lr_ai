@@ -3056,7 +3056,13 @@ def main():
                         if whiffed and answer == "duck":
                             record_answer(True)
                         if whiffed:
-                            far_whiff[mv] = far_whiff.get(mv, 0) + 1 if dist >= 140 else 0
+                            # "out of reach" only if it is STILL far when it
+                            # grabs air: char 3's 8165 (23 f) dashes in from
+                            # 150 and whiffed on our crouch three times - the
+                            # old test then stopped answering it, and it grabbed
+                            d_w, _ = distance()
+                            far_whiff[mv] = (far_whiff.get(mv, 0) + 1
+                                             if dist >= 140 and d_w >= 140 else 0)
                         note = ("" if crouched or not key else "  (no crouch id)") \
                                + ("  (facing flipped)" if flipped_d else "") \
                                + ("  (down re-pressed)" if down_again else "") \
@@ -3141,7 +3147,9 @@ def main():
                         last_action[:] = ["punish", time.perf_counter()]
                         note = f"  -> {btn} @{d2:.0f}"
                 if whiffed:
-                    far_whiff[mv] = far_whiff.get(mv, 0) + 1 if dist >= 140 else 0
+                    d_w, _ = distance()
+                    far_whiff[mv] = (far_whiff.get(mv, 0) + 1
+                                     if dist >= 140 and d_w >= 140 else 0)
                 print(f"  ~    throw {mv:<6} -> step    dist={dist:.0f} "
                       f"frame={fr} left={t_left if t_left is not None else '?'}"
                       f"{'  (their throw whiffed)' if whiffed else ''}{note}")
