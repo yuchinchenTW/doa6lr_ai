@@ -161,6 +161,7 @@ CHAR_POKE = {21: "pk",           # P+K is her poke; P (14 f, +1 on hit) is not
              31: "8P"}
 GENERIC_COMBO = "P,P,P,K"
 CHAR_NAMES = {21: "Nyotengu", 30: "Mai", 31: "Kula"}
+CHAR_PUNCH_REACH = {31: 105}     # how far the standing P punish still lands
 
 
 def throw_class(cmd, hml):
@@ -1394,8 +1395,11 @@ def main():
 
     def ct_key(mode):
         # "walk": T pressed right after letting go of the back key - the game
-        # may read it as 4T; scored apart from the standing version (15/17)
-        return str(fchar) if mode == "idle" else f"walk:{fchar}"
+        # may read it as 4T; scored apart from the standing version (15/17).
+        # Keyed by OUR character too: Mai's T went 18/25 on char 2, Kula's
+        # went 0/13 in her first match (different range and speed)
+        base = f"{my_char}:{fchar}"
+        return base if mode == "idle" else f"walk:{base}"
 
     def ct_allowed(mode="idle"):
         ok, n = ct_stats.get(ct_key(mode), [0, 0])
@@ -2901,7 +2905,10 @@ def main():
                             # standing CPU. The punch landed 6/6
                             # and not from 159+: the long punch there (8020)
                             # whiffed twice and its recovery ate the next 8148
-                            btn = "punch" if d2 <= min(args.punish_punch_range, 155) else None
+                            # a short-armed character whiffs the standing P
+                            # past ~100 (Kula 176: 2 of 13 landed at 94-137)
+                            reach = min(args.punish_punch_range, CHAR_PUNCH_REACH.get(my_char, 155))
+                            btn = "punch" if d2 <= reach else None
                             if btn:
                                 pre = {"mv": me.get("CurrentMove"),
                                        "mt": me.get("MoveType"), "ph": 0,
@@ -3310,8 +3317,8 @@ def main():
                 for k, (ok, n) in sorted(escape["by"].items()):
                     print(f"    {k:<32} {ok}/{n}")
             if danger_stats[0] or danger_stats[1]:
-                ct = ct_stats.get(str(fchar))
-                ctw = ct_stats.get(f"walk:{fchar}")
+                ct = ct_stats.get(f"{my_char}:{fchar}")
+                ctw = ct_stats.get(f"walk:{my_char}:{fchar}")
                 if ct or ctw:
                     print(f"  T first on an idle opponent inside {args.close_throw_range:.0f}: "
                           + (f"standing {ct[0]}/{ct[1]}" if ct else "standing 0/0")
