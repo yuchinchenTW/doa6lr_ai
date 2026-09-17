@@ -125,12 +125,16 @@ CHAR_COMBOS = {
 #   PP2KK 跳ね神楽 (low, mid 28), 6PK 鬼神楽 (mid mid), and the Fatal Rush.
 RECIPE_POOL = {
     21: {"default": ["S,S,S,S", "P,P,6P,K", "P,P,K", "P,P,2K,K", "6P,K", "S", "P"],
-         176:       ["P,S,S,S,S", "P,6P,K", "P,K", "P,2K,K", "P", "S"]},
+         176:       ["P,S,S,S,S", "P,6P,K", "P,K", "P,2K,K", "P", "S"],
+         # after the 2K that made a fast throw whiff: a short stun, the
+         # launcher string never came out of it (Kula: 8K,6P,P 0 for ~60)
+         "lowkick":  ["P", "6P,K", "S"]},
     # Mai: PPPP (mid mid, +16, launches), PPK (mid kick 22, +11), KKK (high x3,
     # +22), 6PKK (mid, low, mid 18 +23), PP2K (low 25+12), plus the Fatal Rush
     # and the one-hit options. All buttons + horizontals, all string branches.
     30: {"default": ["S,S,S,S", "P,P,P,P", "P,P,K", "K,K,K", "6P,K,K", "P,P,2K", "S", "P"],
-         176:       ["P,P,P", "P,K", "P,2K", "S,S,S,S", "P", "S"]},
+         176:       ["P,P,P", "P,K", "P,2K", "S,S,S,S", "P", "S"],
+         "lowkick":  ["P", "6P,K,K", "S"]},
     # Kula: 8PP (+19 stun), PPK (safe pressure), 6PP (+23 stun on CH), KKK
     # (bound), PP6P; 8K launches on a normal hit (15 f) with 9PK / 6PP as
     # the guide's juggles; 9KP is a +34 stun; 236P Diamond Breath freezes.
@@ -139,7 +143,8 @@ RECIPE_POOL = {
     # the pool and the net-damage bandit decides.
     31: {"default": ["8P,P", "P,P,K", "6P,P", "K,K,K", "P,P,6P", "8K,6P,P", "8K,9P,K",
                      "9K,P", "236P,6P,P", "S,S,S,S", "S", "P"],
-         176:       ["P,K", "P,6P", "P,P,K", "S,S,S,S", "P", "S"]},
+         176:       ["P,K", "P,6P", "P,P,K", "S,S,S,S", "P", "S"],
+         "lowkick":  ["P", "6P,P", "S"]},
 }
 # any other character we play: strings every DOA6 character has, scored the
 # same way (P string, PPK, the Fatal Rush, and the two one-hit "take it and
@@ -2329,6 +2334,9 @@ def main():
                     if (foe_open and (in_strike or kind == 9)
                             and combo.get("skip_mv") is None):
                         rkey = my_mv_tick if (in_strike and my_mv_tick in combo_seqs) else "default"
+                        if (last_action[0] == "lowkick" and now - last_action[1] < 0.9
+                                and "lowkick" in RECIPE_POOL.get(my_char, {})):
+                            rkey = "lowkick"      # the throw-answer 2K hit: its own pool
                         recipe, seq = choose_recipe(rkey)
                         if seq is None:
                             seq = (combo_seqs.get(my_mv_tick, combo_seqs.get("default"))
