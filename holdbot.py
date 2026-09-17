@@ -1627,7 +1627,7 @@ def main():
                 prev_tok = None
                 for n_st, st in enumerate(steps):
                     tok = st[2]
-                    if n_st:
+                    if n_st and me.get("MoveKind") not in (4, 5, 6):
                         # The demo's own gap is the whole rule. Our side's
                         # Phase field is not reliable, so waiting for RECOVERY
                         # fell through to "MoveKind 0" - the end of the whole
@@ -1695,7 +1695,10 @@ def main():
                             break
                         time.sleep(0.002)
                     mvs_t = cc_mv.get(text) or []
-                    want = mvs_t[n_st] if n_st < len(mvs_t) and mvs_t[n_st] else expect.get(tok)
+                    want = mvs_t[n_st] if n_st < len(mvs_t) and mvs_t[n_st] else None
+                    from_demo = want is not None
+                    if want is None:
+                        want = expect.get(tok)
                     if again_t:
                         tok_show = f"{tok}(+{again_t})"
                     else:
@@ -1706,11 +1709,13 @@ def main():
                         mark = "(stance entry, no button)"
                     elif not got:
                         mark = "NOTHING CAME OUT"
+                    elif from_demo:
+                        # the demo's own move id is the only real answer
+                        mark = "ok" if want in got else f"WRONG - expected {want}"
                     elif chain:
-                        # the same token again continues a chain, and every
-                        # part has its own animation: 214T runs 8141 > 8156 >
-                        # 8158 > 8160, so only the first matches the table
-                        mark = f"ok (part {n_st + 1} of the chain)"
+                        # no recorded move for this part: the same token again
+                        # continues a chain and each part has its own animation
+                        mark = f"ok? (part {n_st + 1}, no recorded move)"
                     elif want is None:
                         mark = "(this token is not in the calibration)"
                     elif want in got:
