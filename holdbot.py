@@ -171,6 +171,12 @@ CHAR_POKE = {21: "pk",           # P+K is her poke; P (14 f, +1 on hit) is not
 GENERIC_COMBO = "P,P,P,K"
 CHAR_NAMES = {21: "Nyotengu", 30: "Mai", 31: "Kula"}
 CHAR_PUNCH_REACH = {31: 105}     # how far the standing P punish still lands
+# startup of the standing P, for the "interrupt a slow throw with a punch"
+# answer: it has to be live before the grab. Nyotengu's 14 f P lost the
+# race against char 7's 16-frame 8109 (hi-counter grab, unbreakable) with
+# the flat 11-frame threshold that Kula's 9 f P made look fine (5/6).
+# Mai's value is a guess from the guest characters' usual 10-11 f jab.
+CHAR_P_STARTUP = {21: 14, 30: 11, 31: 9}
 
 
 def throw_class(cmd, hml):
@@ -2889,7 +2895,10 @@ def main():
                     # failing (8181 -> 8252, cmd 111, 0/3): then duck/back/side
                     answer = "wait"
                 elif answer == "crouch":
-                    if (t_left is not None and t_left >= args.throw_jab_frames
+                    jab_need = max(args.throw_jab_frames,
+                                   CHAR_P_STARTUP.get(my_char, 12)
+                                   + int(round(input_lag[0] / (1000 / 60))) + 1)
+                    if (t_left is not None and t_left >= jab_need
                             and dist <= args.jab_reach
                             and me.get("CurrentMove") == 0
                             and mv not in BACK_THROWS):
