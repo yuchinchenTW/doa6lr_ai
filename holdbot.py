@@ -1625,104 +1625,79 @@ def main():
                 print(f"  {text}" + (f"  (run {run_n + 1})" if args.test_repeat > 1 else ""))
                 hp0 = foe.get("CurrentHealth")
                 prev_tok = None
-                for n_st, st in enumerate(steps):
+                n_st = 0
+                while n_st < len(steps):
+                    st = steps[n_st]
                     tok = st[2]
+                    # A run of the same token is one chain (214T x4): press it
+                    # straight through, each part when the animation moves on.
+                    # Observing between parts spent the window and the chain
+                    # dropped after the second grab.
+                    run_len = 1
+                    while (n_st + run_len < len(steps)
+                           and steps[n_st + run_len][2] == tok):
+                        run_len += 1
                     if n_st and me.get("MoveKind") not in (4, 5, 6):
-                        # The demo's own gap is the whole rule. Our side's
-                        # Phase field is not reliable, so waiting for RECOVERY
-                        # fell through to "MoveKind 0" - the end of the whole
-                        # move - and every follow-up went out after the string
-                        # had already dropped. That is the "super slow" four P's.
-                        # Start at HALF the demo's gap and let the re-presses
-                        # find the first frame the game will take. The demo
-                        # waits for the previous move to finish, but the buffer
-                        # opens in its RECOVERY - sleeping the whole 0.735 s
-                        # after H+K put the P visibly late.
-                        # the demo's whole gap, less the input lag. Half of it
-                        # plus re-presses looked faster but the second input of
-                        # 3K,K,66P came out as a standalone K (179) instead of
-                        # the string's 8093 - the early presses are spent in
-                        # the previous move's active frames and the string has
-                        # dropped by the time one lands.
                         need_t = (dts_t[n_st] - 0.05) if n_st < len(dts_t) else 0.1
-                        left_t = max(0.04, need_t) - (time.perf_counter() - t_step)
+                        left_t = need_t - (time.perf_counter() - t_step)
                         if left_t > 0:
                             time.sleep(left_t)
                     before = me.get("CurrentMove")
-                    if n_st and me.get("MoveKind") in (4, 5, 6):
-                        # a throw or hold is playing: its window is at the END
-                        # of each part (0.20, 0.53, 0.48 s in for the 214T
-                        # chain), so press until the animation moves on
-                        mv_w, t_w, n_w, t_lw = before, time.perf_counter(), 0, 0.0
-                        while time.perf_counter() - t_w < 1.1:
-                            me.refresh()
-                            if me.get("MoveKind") == 0 or me.get("CurrentMove") != mv_w:
-                                break
-                            if n_w < 8 and (n_w == 0 or time.perf_counter() - t_lw > 0.12):
-                                combo_press(st)
-                                t_lw = time.perf_counter()
-                                n_w += 1
-                            time.sleep(0.004)
-                    else:
-                        combo_press(st)
-                    t_step = time.perf_counter()
-                    got, t_s = [], time.perf_counter()
-                    again_t, t_ag = 0, time.perf_counter()
-                    while time.perf_counter() - t_s < 0.9:
-                        me.refresh()
-                        mv_n, k_n = me.get("CurrentMove"), me.get("MoveKind")
-                        fresh = mv_n != before
-                        if k_n != 0 and fresh and (not got or got[-1] != mv_n):
-                            got.append(int(mv_n))
-                        # Nothing out yet: press again, the way comboreplay
-                        # does. A follow-up that lands in the previous move's
-                        # active frames is simply eaten, and one press per
-                        # token left the second P of HK,PPPP missing every run
-                        # while the replay's "+1 re-press" landed it.
-                        elif (not got and again_t < 12
-                              and me.get("MoveKind") not in (4, 5, 6)
-                              and time.perf_counter() - t_ag > 0.07):
+                    got, again_t = [], 0
+                    for part in range(run_len):
+                        if part:
+                            mv_w, t_w, n_w, t_lw = me.get("CurrentMove"), time.perf_counter(), 0, 0.0
+                            while time.perf_counter() - t_w < 1.1:
+                                me.refresh()
+                                if me.get("MoveKind") == 0 or me.get("CurrentMove") != mv_w:
+                                    break
+                                if n_w < 8 and (n_w == 0 or time.perf_counter() - t_lw > 0.12):
+                                    combo_press(st)
+                                    t_lw = time.perf_counter()
+                                    n_w += 1
+                                time.sleep(0.004)
+                            again_t += max(0, n_w - 1)
+                        else:
                             combo_press(st)
-                            again_t += 1
-                            t_ag = time.perf_counter()
-                        # press the next token as soon as this one is out, the
-                        # way the engine does. Waiting for neutral put the
-                        # second part of a four-part throw 0.9 s late, where
-                        # the demo pressed it after 0.22 s.
-                        if got and time.perf_counter() - t_s > 0.12:
-                            break
-                        if k_n == 0 and time.perf_counter() - t_s > 0.4:
-                            break
-                        time.sleep(0.002)
+                        t_step = time.perf_counter()
+                        t_s = time.perf_counter()
+                        while time.perf_counter() - t_s < (0.35 if run_len > 1 else 0.9):
+                            me.refresh()
+                            mv_n, k_n = me.get("CurrentMove"), me.get("MoveKind")
+                            if k_n != 0 and mv_n != before and (not got or got[-1] != mv_n):
+                                got.append(int(mv_n))
+                                break
+                            if (run_len == 1 and not got and again_t < 12
+                                    and k_n not in (4, 5, 6)
+                                    and time.perf_counter() - t_s > 0.07):
+                                combo_press(st)
+                                again_t += 1
+                                t_s = time.perf_counter()
+                            time.sleep(0.002)
+                        if got:
+                            before = got[-1]
                     mvs_t = cc_mv.get(text) or []
-                    want = mvs_t[n_st] if n_st < len(mvs_t) and mvs_t[n_st] else None
-                    from_demo = want is not None
-                    if want is None:
-                        want = expect.get(tok)
-                    if again_t:
-                        tok_show = f"{tok}(+{again_t})"
-                    else:
-                        tok_show = tok
-                    chain = tok == prev_tok and got
+                    for k_i in range(run_len):
+                        idx = n_st + k_i
+                        want = mvs_t[idx] if idx < len(mvs_t) and mvs_t[idx] else None
+                        from_demo = want is not None
+                        if want is None:
+                            want = expect.get(tok)
+                        g_one = got[k_i] if k_i < len(got) else None
+                        show = f"{tok}(+{again_t})" if (again_t and not k_i) else tok
+                        if tok.strip("0123456789") == "":
+                            mark = "(stance entry, no button)"
+                        elif g_one is None:
+                            mark = "NOTHING CAME OUT"
+                        elif want is None:
+                            mark = "(this token is not in the calibration)"
+                        elif want == g_one:
+                            mark = "ok"
+                        else:
+                            mark = f"WRONG - expected {want}"
+                        print(f"      {show:<8} -> {str(g_one) or '-':<22} {mark}")
                     prev_tok = tok
-                    if tok.strip("0123456789") == "":
-                        mark = "(stance entry, no button)"
-                    elif not got:
-                        mark = "NOTHING CAME OUT"
-                    elif from_demo:
-                        # the demo's own move id is the only real answer
-                        mark = "ok" if want in got else f"WRONG - expected {want}"
-                    elif chain:
-                        # no recorded move for this part: the same token again
-                        # continues a chain and each part has its own animation
-                        mark = f"ok? (part {n_st + 1}, no recorded move)"
-                    elif want is None:
-                        mark = "(this token is not in the calibration)"
-                    elif want in got:
-                        mark = "ok"
-                    else:
-                        mark = f"WRONG - expected {want}"
-                    print(f"      {tok_show:<8} -> {'>'.join(map(str, got)) or '-':<22} {mark}")
+                    n_st += run_len
                 dealt = hp0 - foe.get("CurrentHealth")
                 print(f"      damage to the dummy: {dealt if 0 <= dealt < 500 else '?'}\n")
                 time.sleep(1.0)
