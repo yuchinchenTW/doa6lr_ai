@@ -365,6 +365,22 @@ def record(sides, hot, rebind):
         # 8160. So they are inputs, and they are recorded like any other.
         # What IS an echo is the code that arrives as we drop back into the
         # dance (MoveKind 0 on a neutral id).
+        if kind_now == 13 and cmd != last_cmd:
+            # MoveKind 13 is a stance transition, not a move of ours. Minato's
+            # 4P slides straight into the Minato Shuffle (move 8118) and the
+            # game writes its own code for that (5701), which the replay then
+            # tried to press: the screen's task is "P P 4P, in the Shuffle,
+            # 6P" - four inputs, and this is not one of them. The move itself
+            # is kept so the chain still shows the stance.
+            last_cmd = cmd
+            if mv != last_mv:
+                events.append({"t": round(now - started, 3), "mv": int(mv),
+                               "kind": int(kind_now), "stance": True})
+                print(f"  {now - started:6.3f}s  move {mv} (kind 13, stance - "
+                      f"not an input)")
+                last_mv = mv
+            time.sleep(0.001)
+            continue
         if kind_now == 0 and mv not in IDLE_MOVES and cmd != last_cmd:
             NEUTRAL_IDS.add(int(mv))     # dropping back into the dance
             last_cmd = cmd
