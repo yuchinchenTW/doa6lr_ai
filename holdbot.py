@@ -2705,7 +2705,10 @@ def main():
                 my_kind = me.get("MoveKind")
                 in_strike = (my_type_now == MT_STRIKE and my_kind in MK_STRIKES
                              and my_mv_tick not in (0, WALK_FWD, WALK_BACK))
-                my_idle = my_type_now == MT_IDLE and my_mv_tick == 0
+                # MoveKind 0 is neutral: standing, walking, and for Minato the
+                # dance she plays on the spot (ids like 8022/8027). "move id 0"
+                # is never true for her, so she read as never idle.
+                my_idle = my_type_now == MT_IDLE and my_kind == 0
                 if combo["hp0"] is None:
                     if combo.get("skip_mv") is not None and my_mv_tick != combo["skip_mv"]:
                         combo["skip_mv"] = None        # we moved on: openers count again
@@ -2744,8 +2747,12 @@ def main():
                     d_c, _ = distance()
                     # was the last input taken? our move id left the one we
                     # pressed it during
-                    if combo.get("await_") and my_mv_tick not in (
-                            0, combo["last_mv"], WALK_FWD, WALK_BACK):
+                    if (combo.get("await_") and my_kind != 0
+                            and my_mv_tick not in (
+                                0, combo["last_mv"], WALK_FWD, WALK_BACK)):
+                        # kind 0 would be the dance, not the move we pressed:
+                        # "3PK came out as our move 8023" was her idle, and the
+                        # string moved on from an input that never landed
                         combo["await_"] = False
                         combo["again"] = 0
                         print(f"        + {combo.get('tok', '?')} came out as our move "
