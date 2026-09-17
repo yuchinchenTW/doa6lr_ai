@@ -641,7 +641,16 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             # produces no move of its own and the recording only sees the
             # kind-13 transition. Tap back and wait for it.
             back = dirs_to_names(-1 if facing_right else 1, 0)
-            inj.down(back); time.sleep(0.08); inj.up(back)
+            # wait for the move that allows the transition to be under way,
+            # then hold back through its recovery (the demo's stance appeared
+            # ~0.30 s after that move started)
+            t_w = time.perf_counter()
+            while time.perf_counter() - t_w < 0.4:
+                me.refresh()
+                if me.get("MoveKind") == 3:
+                    break
+                time.sleep(0.002)
+            inj.down(back); time.sleep(0.18); inj.up(back)
             t_st = time.perf_counter()
             while time.perf_counter() - t_st < 0.5:
                 me.refresh()
