@@ -653,11 +653,12 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
             if st["cmd"] in MOVE_CMDS or tk is None:
                 continue
             seq.append(tk)
-        # a strike string is what holdbot presses after an opener connects; a
-        # throw cannot be used there (you cannot grab a character in hit stun).
-        # A single move is fine - the pools already carry "S" and "P" as
-        # one-token recipes, and a special like 236P is exactly that.
-        if seq and not seq[0].endswith("T"):
+        # Everything is saved, throws included: holdbot skips a throw-led
+        # sequence when picking a combo recipe (a character in hit stun cannot
+        # be grabbed) and uses the longest one where it has decided to throw
+        # anyway. A single move is a valid recipe too - the pools already
+        # carry "S" and "P" as one-token entries.
+        if seq:
             text = ",".join(seq)
             ch = me.get("CurrentCharacter")
             try:

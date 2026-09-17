@@ -1026,6 +1026,33 @@ def main():
         combo_bank = {}
     recipe_cache = {}
 
+    def cc_all(char):
+        try:
+            with open("combo_challenge.json", encoding="utf-8") as fh:
+                return [t for t in json.load(fh).get(str(char), []) if t]
+        except (OSError, ValueError):
+            return []
+
+    def best_throw(char):
+        """The longest throw the Combo Challenge taught this character.
+
+        A throw-led sequence is no use as a combo recipe - a character in hit
+        stun cannot be grabbed - but it is exactly what to press where the bot
+        has already decided to throw: the T-first on an idle opponent, and the
+        throw punish after their whiff. Minato's 214T is a four-part command
+        throw and the plain T beside it is small change."""
+        best = None
+        for t in cc_all(char):
+            toks = t.split(",")
+            if toks[0].endswith("T") and (best is None or len(toks) > len(best.split(","))):
+                best = t
+        return best
+
+    def press_best_throw(bt):
+        for st_t in parse_combo(bt):
+            combo_press(st_t)
+            time.sleep(0.25)          # the demo's own interval between parts
+
     def cc_extra(char):
         """Combos the game's own Combo Challenge taught, cleared by
         comboreplay and written to combo_challenge.json. They join the
@@ -1043,7 +1070,10 @@ def main():
         early sample cannot lock a weaker string in."""
         pool = RECIPE_POOL.get(my_char, GENERIC_POOL).get(key) if combo_auto else None
         if pool is not None and key == "default":
-            pool = pool + [t for t in cc_extra(my_char) if t not in pool]
+            # throw-led sequences are not combo material (no grabbing a
+            # character in hit stun); best_throw uses those instead
+            pool = pool + [t for t in cc_extra(my_char)
+                           if t not in pool and not t.split(",")[0].endswith("T")]
         if not pool:
             return None, None
         stats = combo_bank.setdefault(str(my_char), {}).setdefault(str(key), {})
@@ -2844,7 +2874,11 @@ def main():
                     if zoning is not None:
                         inj.up(zoning); zoning = None
                         time.sleep(0.02)
-                    inj.down(["throw"]); time.sleep(args.press); inj.up(["throw"])
+                    bt = best_throw(my_char)
+                    if bt:
+                        press_best_throw(bt)
+                    else:
+                        inj.down(["throw"]); time.sleep(args.press); inj.up(["throw"])
                     close_throw.update(t=now, hp0=foe.get("CurrentHealth"),
                                        myhp0=me.get("CurrentHealth"), done=False,
                                        mode=ct_mode)
@@ -3304,11 +3338,15 @@ def main():
                         and me.get("MoveType") == MT_IDLE:
                     btn = ("throw" if d2 <= args.punish_throw_range else
                            "punch" if d2 <= args.punish_punch_range else None)
+                    bt = best_throw(my_char) if btn == "throw" else None
                     if btn:
                         pre = {"mv": me.get("CurrentMove"), "mt": me.get("MoveType"),
                                "ph": 0, "fmv": foe.get("CurrentMove"),
                                "fph": foe.get("Phase")}
-                        jab(inj, btn, press=args.press)
+                        if bt:
+                            press_best_throw(bt)
+                        else:
+                            jab(inj, btn, press=args.press)
                         punished += 1
                         by_kind.setdefault("punish", [0, 0])[1] += 1
                         fire("punish", f"~ duck punish", me.get("CurrentMove"),
