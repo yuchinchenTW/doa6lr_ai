@@ -1659,12 +1659,18 @@ def main():
     last_poke = [0.0]
     pokes = [0]
     poke_throttled = [False]
+    hp_max = [0]            # our health at the top of this round
+    careful = [False]       # under half health: pokes a third as often, no
+                            # run-up attacks, no T first - the counter-hits
+                            # on those are what finishes a low-health round
 
     def poke_gap_now():
         """4P landed 12/26, then 6/19, then 2/13 against the same CPU, and
         the misses cost 95 of 291 damage: it reads a poke that comes every
         0.45 s. Once the rate is under a quarter, poke a third as often."""
         ok, n = by_kind.get("poke", [0, 0])
+        if careful[0]:
+            return args.poke_gap * 3
         if n >= 10 and ok / n < 0.25:
             if not poke_throttled[0]:
                 poke_throttled[0] = True
@@ -2083,6 +2089,16 @@ def main():
                 rounds[1] += 1
                 round_end[0] = now
                 print(f"  ===== round lost ({rounds[0]}-{rounds[1]}) their hp {foe_hp_now}")
+            if 0 < my_hp_now <= 2000:
+                if my_hp_now > hp_max[0] or my_hp_now > prev_hp[0] + 50:
+                    hp_max[0] = my_hp_now          # a new round refilled the bar
+                was_careful = careful[0]
+                careful[0] = hp_max[0] > 0 and my_hp_now < 0.5 * hp_max[0]
+                if careful[0] and not was_careful:
+                    print(f"  hp {my_hp_now}/{hp_max[0]}: careful mode - pokes a third as "
+                          f"often, no run-up attacks, no T first")
+                elif was_careful and not careful[0]:
+                    print(f"  hp {my_hp_now}/{hp_max[0]}: back to normal offence")
             prev_hp[:] = [my_hp_now, foe_hp_now]
             if my_hp_now < last_my_hp and me.get("MoveType") in (0, 10, 13, 17):
                 pass                                # round end / reset, not a hit
@@ -2394,8 +2410,11 @@ def main():
                 if combo["hp0"] is None:
                     if combo.get("skip_mv") is not None and my_mv_tick != combo["skip_mv"]:
                         combo["skip_mv"] = None        # we moved on: openers count again
-                    if (foe_open and (in_strike or kind == 9)
-                            and combo.get("skip_mv") is None):
+                    if foe_open and in_strike and combo.get("skip_mv") is None:
+                        # (an "air" opener from idle - they are airborne, we
+                        # stand - is gone: a juggle has to be buffered in the
+                        # launcher's recovery; pressed from idle it whiffed
+                        # under the falling body 20+ times, 2 hits of 8-14)
                         rkey = my_mv_tick if (in_strike and my_mv_tick in combo_seqs) else "default"
                         if (last_action[0] == "lowkick" and now - last_action[1] < 0.9
                                 and "lowkick" in RECIPE_POOL.get(my_char, {})):
@@ -2471,6 +2490,10 @@ def main():
                             combo_reset("no ground-throw window")
                     elif not foe_open and now - combo["t"] > 0.25:
                         combo_reset("they recovered" if kind == 0 else f"foe kind {kind}")
+                    elif ready and d_c > CHAR_PUNCH_REACH.get(my_char, 150):
+                        # P+K knocked them to 178: the PP after it can only
+                        # whiff, and the whiff is what the CPU throws
+                        combo_reset(f"out of reach ({d_c:.0f})")
                     elif ready or (foe_open and my_idle and d_c <= args.combo_range
                                    and now - combo["t"] > 0.03):
                         do_press = True
@@ -2650,7 +2673,7 @@ def main():
                         and in_danger           # 29/47 vs the grappler, 0/14 vs everyone else
                         and d_now <= args.close_throw_range
                         and (my_free or ct_mode == "walk")     # a back DASH (4) is not "free"
-                        and precrouch is None and ct_allowed(ct_mode)
+                        and precrouch is None and not careful[0] and ct_allowed(ct_mode)
                         and close_throw["done"] and now - last_fire > 0.5
                         and mv in (0, 1, 2, 3)):
                     # also out of the back-off walk: 8137 caught us walking
@@ -3182,7 +3205,7 @@ def main():
                 else:
                     unknown_seen.setdefault(mv, startup.seen.get((fchar, mv), 0))
             is_runup = (known is None and args.approach_attack != "none"
-                        and unknown_seen.get(mv, 0) >= 3)
+                        and not careful[0] and unknown_seen.get(mv, 0) >= 3)
             if is_runup and dist > args.approach_range and fr >= 18                     and mv in LUNGE_PRECURSORS and me.get("CurrentMove") == 0:
                 # 188 -> 8149 -> 8183: 23 frames of run-up, then a lunge that
                 # covers 250 units in 15 frames and grabs crouchers. Nothing
