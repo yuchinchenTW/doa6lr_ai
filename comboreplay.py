@@ -415,8 +415,11 @@ def plan(events):
     press when the previous produced move reaches this frame)."""
     steps = []
     t_prev = None
+    stance_pending = False
     for i, e in enumerate(events):
         if "cmd" not in e:
+            if e.get("stance"):
+                stance_pending = True
             continue
         dt = None if t_prev is None else round(e["t"] - t_prev, 3)
         t_prev = e["t"]
@@ -431,7 +434,9 @@ def plan(events):
                 break
         steps.append({"tok": e["tok"], "cmd": e["cmd"], "prev_mv": e["prev_mv"],
                       "prev_fr": e["prev_fr"], "mv": produced, "dist": e.get("dist"),
-                      "dt": dt, "chain": chain, "in_throw": e.get("in_throw", False)})
+                      "dt": dt, "chain": chain, "in_throw": e.get("in_throw", False),
+                      "stance_before": stance_pending})
+        stance_pending = False
     return steps
 
 
@@ -630,6 +635,21 @@ def replay(me, steps, inj, facing_right, lag_frames=2, tries=None, foe=None):
                              keep=keep_fwd)
         cmd = s["cmd"]
         used = None
+        if s.get("stance_before"):
+            # The Minato Shuffle is entered by a bare direction after the move
+            # that allows it (the guide lists 6PP4, KP4, 3KK4, PPP4), so it
+            # produces no move of its own and the recording only sees the
+            # kind-13 transition. Tap back and wait for it.
+            back = dirs_to_names(-1 if facing_right else 1, 0)
+            inj.down(back); time.sleep(0.08); inj.up(back)
+            t_st = time.perf_counter()
+            while time.perf_counter() - t_st < 0.5:
+                me.refresh()
+                if me.get("MoveKind") == 13:
+                    break
+                time.sleep(0.002)
+            print(f"      (stance entry: tapped back, kind now "
+                  f"{me.get('MoveKind')} move {me.get('CurrentMove')})")
         t_prev_press = time.perf_counter()
         if HELD_FWD:
             hf = list(HELD_FWD)
