@@ -65,12 +65,17 @@ again, separately, in holdbot:
 * a step the recording skipped (a walk) still took time that belongs to the
   next gap
 * a follow-up goes out at the recorded gap less 0.08 s, with up to three
-  retries on a short gap and twelve on a long one, spaced 0.07 s from the END
-  of the previous press. That cadence is not a knob. Tightening it to 0.045 s
-  and timing it from the button instead put four presses inside the long gap
-  of `66P,8P,P,P,4K,K,K,K`; the spares buffered and surfaced as the P string's
-  third hit where the 4K belonged, 8046 instead of 8053. The first press of a
-  token times from the button, the retries after it do not. The retries matter as much as the timing: every fraction of the gap
+  retries on a short gap and twelve on a long one, always measured from the
+  END of the previous press. Timing the retries from the button instead fitted
+  four presses inside the long gap of `66P,8P,P,P,4K,K,K,K`; the spares
+  buffered and surfaced as the P string's third hit where the 4K belonged,
+  8046 instead of 8053. The first press of a token times from the button, the
+  retries after it do not.
+* the two gap lengths want different retry spacing. A long gap keeps 0.07 s
+  (0.115 s apart in practice) because that is where a spare press does damage.
+  A short one gets 0.045 s (0.09 s apart): the closing K of the Shuffle had its
+  first press eaten and its one retry landed after the stance had moved on, so
+  it came out as a standing kick, 179 instead of 8056 The retries matter as much as the timing: every fraction of the gap
   tried (0.4, 0.5, gap-0.06) lost the closing K of the Shuffle the same way,
   one press eaten and a single retry landing after the stance had moved on.
   Twelve retries is too many - the spare presses buffer and eat the input after
@@ -93,7 +98,8 @@ fell apart in a fight. The three places that now match:
 
 * the gap gate: over 0.4 s, wait for our own `MoveKind` to return to 0, capped
   at three quarters of the gap; under it, the gap less 0.08 s
-* the re-press interval: 0.07 s, measured from the end of the press
+* the re-press interval: 0.07 s on a long gap, 0.045 s on a short one,
+  always measured from the END of the press
 * the re-press cap: twelve on a long gap, three on a short one. The cap sits in
   the give-up test, not in the condition, so a string that is never accepted
   still resets on its 1.2 s timeout

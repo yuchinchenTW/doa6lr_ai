@@ -1943,18 +1943,24 @@ def main():
                         # one on a short gap: none at all lost the fourth
                         # input of 66P,8P,P,P,4K... entirely, and more than one
                         # buffers a spare press that eats the input after it
-                        # The cadence is 0.07 s measured from the END of
-                        # the press, which is 0.115 s apart in practice, and it
-                        # is not a knob. Tightening it to 0.045 and timing it
-                        # from the button put four presses inside the long gap
-                        # of 66P,8P,P,P,4K...: the spares buffered and surfaced
-                        # as the P string's third hit where the 4K belonged
-                        # (8046 instead of 8053), exactly the way twelve
-                        # retries had. The first press of a token times from
-                        # the button; the retries after it do not.
+                        # Measured from the END of the press, never from
+                        # the button: timing the retries from the button fitted
+                        # four presses inside the long gap of 66P,8P,P,P,4K...
+                        # and the spares buffered and surfaced as the P
+                        # string's third hit where the 4K belonged, 8046
+                        # instead of 8053.
+                        # A LONG gap keeps 0.07 (0.115 s apart in practice).
+                        # That is where spare presses do damage, and two
+                        # retries is all that window ever needed.
+                        # A SHORT gap gets 0.045 (0.09 s apart). The closing K
+                        # of the Shuffle had its first press eaten and its one
+                        # retry landed 0.035 s after the stance had already
+                        # moved on, so it came out as a standing kick, 179
+                        # instead of 8056. The window is between the two.
                         elif (not got and again_t < (12 if gap_long[0] else 3)
                               and me.get("MoveKind") not in (4, 5, 6)
-                              and time.perf_counter() - t_ag > 0.07):
+                              and time.perf_counter() - t_ag
+                              > (0.07 if gap_long[0] else 0.045)):
                             combo_press(st)
                             again_t += 1
                             t_ag = time.perf_counter()
