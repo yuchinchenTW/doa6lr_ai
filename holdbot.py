@@ -1812,7 +1812,10 @@ def main():
                             # late. The single re-press covers an early one;
                             # more than one would buffer and eat the input
                             # after it.
-                            left_t = max(0.04, gap_t * 0.5) - (time.perf_counter() - t_step)
+                            # 0.4, not 0.5: the closing K of the Shuffle runs
+                            # at a 0.234 s gap and half of it still landed
+                            # after the stance had moved on.
+                            left_t = max(0.04, gap_t * 0.4) - (time.perf_counter() - t_step)
                             if left_t > 0:
                                 time.sleep(left_t)
                     before = me.get("CurrentMove")
