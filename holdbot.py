@@ -813,6 +813,8 @@ def main():
         except Exception:
             return False
 
+    pos_fail = [0]      # consecutive failures of the remembered offsets
+
     def remembered_pair_ok():
         """Between fights the objects move; the field offsets do not. Try the
         offsets that worked before the search starts over."""
@@ -832,6 +834,7 @@ def main():
         except Exception:
             return False
         me.pos, foe.pos = my_a, foe_a
+        pos_fail[0] = 0
         print(f"position: remembered offsets still valid (ours +0x{pos_mem[0]:X}, "
               f"theirs +0x{pos_mem[1]:X}), distance now {d:.0f}")
         return True
@@ -847,7 +850,17 @@ def main():
         if got is not None:
             my_addr, foe_addr, my_off, foe_off = got
             me.pos, foe.pos = my_addr, foe_addr
-            keep = pos_mem[0] is not None and pos_mem[0] < 0x1000 and my_off >= 0x1000
+            # A remembered offset that has worked is not replaced on the
+            # strength of one failed check: between matches the objects are
+            # briefly garbage and the scan then "finds" something else
+            # (+0x63C kept overwriting the +0xD0 root transform, and every
+            # distance after that was wrong). Three failures in a row, or the
+            # new one is simply used for now and not saved.
+            pos_fail[0] += 1
+            keep = ((pos_mem[0] is not None and pos_mem[0] < 0x1000
+                     and my_off >= 0x1000)
+                    or (pos_mem[0] is not None and pos_mem[0] != my_off
+                        and pos_fail[0] < 3))
             pos_mem[:] = [my_off, foe_off]
             if keep:
                 print(f"  position: using +0x{my_off:X} for now but NOT saving it over "
