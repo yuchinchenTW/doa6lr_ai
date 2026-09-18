@@ -514,16 +514,6 @@ def main():
                          "dash move (e.g. 66P): tries every combination of "
                          "pre-wait, tap length and gap from neutral and prints "
                          "the move id each one produced. Nothing else runs.")
-    ap.add_argument("--test-distance", type=float, default=0.0,
-                    help="walk to this distance before each --test-combo run. "
-                         "Off by default: 66P and 8P reach on their own, and "
-                         "walking in first changed how the string played out.")
-    ap.add_argument("--test-gap", type=float, default=0.75, metavar="SCALE",
-                    help="fraction of the demo's recorded gap to wait before a "
-                         "follow-up that comes after a long pause (default "
-                         "0.75). Lower is faster; too low and the game answers "
-                         "with the previous move's string continuation instead "
-                         "of the move wanted, which shows up as a WRONG line.")
     ap.add_argument("--test-repeat", type=int, default=1,
                     help="how many times to run each string in --test-combo")
     ap.add_argument("--dry-run", action="store_true")
@@ -1757,7 +1747,6 @@ def main():
         else:
             strings = [args.test_combo]
 
-        dummy_hurts = [False]
         print(f"test-combo: {len(strings)} string(s) for "
               f"{CHAR_NAMES.get(my_char, my_char)}. Stand in Training with the "
               f"dummy in front of you. Ctrl-C to stop.\n")
@@ -1770,33 +1759,6 @@ def main():
                             and me.get("CurrentMoveFrame") >= 0):
                         break
                     time.sleep(0.005)
-                # Walk in first. The Challenge is performed at point blank;
-                # from 128 away the P after 66P,8P cannot reach and the rest of
-                # the string goes with it.
-                if args.test_distance > 0:
-                    fwd_t = dirs_to_names(1 if facing_state[0] else -1, 0)
-                    d_t, _ = distance()
-                    if d_t and d_t > args.test_distance:
-                        inj.down(fwd_t)
-                        t_c, flip_t = time.perf_counter(), False
-                        while time.perf_counter() - t_c < 2.5:
-                            me.refresh()
-                            if (not flip_t and me.get("CurrentMove") in BACK_IDS
-                                    and time.perf_counter() - t_c > 0.08):
-                                inj.up(fwd_t)          # walking away: mirrored
-                                facing_state[0] = not facing_state[0]
-                                fwd_t = dirs_to_names(1 if facing_state[0] else -1, 0)
-                                inj.down(fwd_t)
-                                flip_t = True
-                            d_t, _ = distance()
-                            if d_t and d_t <= args.test_distance:
-                                break
-                            time.sleep(0.005)
-                        inj.up(fwd_t)
-                        time.sleep(0.15)
-                    d_t, _ = distance()
-                    if d_t:
-                        print(f"      (starting at {d_t:.0f})")
                 time.sleep(0.25)
                 gap_long = [True]
                 steps = parse_combo(text)
@@ -1826,11 +1788,8 @@ def main():
                             # continuation instead: 9K's follow-up 6P came out
                             # as 8084 rather than the standing 177, and the
                             # rest of the combo went with it.
-                            # ...but never later than the demo itself, less
-                            # the input lag. Waiting for neutral with slack on
-                            # top put the P after 66P,8P visibly late.
                             t_g = time.perf_counter()
-                            while time.perf_counter() - t_g < gap_t * args.test_gap:
+                            while time.perf_counter() - t_g < gap_t + 0.25:
                                 me.refresh()
                                 if me.get("MoveKind") == 0:
                                     break
@@ -1846,8 +1805,6 @@ def main():
                             left_t = max(0.04, gap_t - 0.06) - (time.perf_counter() - t_step)
                             if left_t > 0:
                                 time.sleep(left_t)
-                    d_before, _ = distance()
-                    hp_b = foe.get("CurrentHealth")
                     before = me.get("CurrentMove")
                     if n_st and me.get("MoveKind") in (4, 5, 6):
                         # a throw or hold is playing: its window is at the END
@@ -1930,16 +1887,7 @@ def main():
                         mark = "ok"
                     else:
                         mark = f"WRONG - expected {want}"
-                    d_hit = hp_b - foe.get("CurrentHealth")
-                    if not dummy_hurts[0] and 0 < d_hit < 500:
-                        dummy_hurts[0] = True
-                    # distance when the input went out, and what it took off:
-                    # an input that comes out but does not connect is a
-                    # spacing problem, not a timing one
-                    print(f"      {tok_show:<8} -> {'>'.join(map(str, got)) or '-':<22} {mark}"
-                          + (f"   [dist {d_before:.0f}" if d_before else "   [dist ?")
-                          + (f", hit {d_hit}]" if 0 < d_hit < 500
-                             else ("]" if not dummy_hurts[0] else ", MISSED]")))
+                    print(f"      {tok_show:<8} -> {'>'.join(map(str, got)) or '-':<22} {mark}")
                 dealt = hp0 - foe.get("CurrentHealth")
                 print(f"      damage to the dummy: {dealt if 0 <= dealt < 500 else '?'}\n")
                 time.sleep(1.0)
