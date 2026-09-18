@@ -1321,7 +1321,14 @@ def main():
         # the second P of HK,PPPP vanished while comboreplay, holding 0.045 s,
         # landed every one. The buffer window inside a string is stricter than
         # the one from neutral.
-        time.sleep(max(args.press, 0.045))
+        # A THROW keeps the short press. That 0.045 s was measured on a punch
+        # string and applied to everything, and it is the only thing in
+        # combo_press that changed for a throw between f0693be, where the 214T
+        # chain ran 4/4, and now, where its third part comes out as 182 - a
+        # throw from neutral. The chain is driven by re-pressing every 0.12 s
+        # and a press held more than twice as long sits across the transition
+        # the re-press is waiting for.
+        time.sleep(args.press if btn == "throw" else max(args.press, 0.045))
         inj.up([btn])
         if names:
             inj.up(names)
