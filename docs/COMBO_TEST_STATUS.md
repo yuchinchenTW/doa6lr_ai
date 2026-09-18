@@ -64,7 +64,15 @@ again, separately, in holdbot:
   branch and the halved timing plus re-presses is right.
 * a step the recording skipped (a walk) still took time that belongs to the
   next gap
-* a follow-up goes out at the recorded gap less 0.08 s, with up to three
+* a SHORT gap presses at a flat 0.04 s. `--probe-step 7` swept the closing K
+  of the Shuffle from 0.04 s to 0.34 s in 0.02 s steps and exactly one delay
+  produced the move: 0.04 s gave 8056, 0.06 s and everything after gave nothing
+  at all. The press is not late at 0.06 s, it is ignored. At 0.04 s the move
+  still arrived 0.232 s later against the demo's 0.234 s, so the input buffers:
+  pressing early does not make the move early, it only makes sure the game
+  takes it. "The gap less 0.08 s" was 0.154 s here, past the window; the other
+  short gaps worked only because 0.044 s and 0.091 s are early by accident
+* a LONG gap goes out at the recorded gap less 0.08 s, with up to three
   retries on a short gap and twelve on a long one, always measured from the
   END of the previous press. Timing the retries from the button instead fitted
   four presses inside the long gap of `66P,8P,P,P,4K,K,K,K`; the spares

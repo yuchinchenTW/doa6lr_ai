@@ -1947,7 +1947,22 @@ def main():
                             # the single re-press landing after the stance had
                             # moved on. So: the same timing it uses, and room
                             # for more than one retry.
-                            left_t = max(0.04, gap_t - 0.08) - (time.perf_counter() - t_step)
+                            # --probe-step 7 swept the closing K of the
+                            # Shuffle from 0.04 s to 0.34 s in 0.02 s steps.
+                            # Exactly one delay produced the move: 0.04 s gave
+                            # 8056, and 0.06 s and everything after it gave
+                            # nothing at all. The press is not late at 0.06 s,
+                            # it is ignored.
+                            # At 0.04 s the move still came out 0.232 s later,
+                            # against the demo's 0.234 s. So the input BUFFERS:
+                            # pressing early does not make the move early, it
+                            # just makes sure the game takes it, and the move
+                            # arrives on the demo's own schedule anyway.
+                            # That is why "the gap less 0.08" was wrong here -
+                            # 0.154 s was past the window - and it is why the
+                            # other short gaps happened to work: 0.044 s and
+                            # 0.091 s are early enough by accident.
+                            left_t = 0.04 - (time.perf_counter() - t_step)
                             if left_t > 0:
                                 time.sleep(left_t)
                     before = me.get("CurrentMove")
