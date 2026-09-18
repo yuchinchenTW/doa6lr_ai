@@ -1778,8 +1778,77 @@ def main():
                 print(f"  {text}" + (f"  (run {run_n + 1})" if args.test_repeat > 1 else ""))
                 hp0 = foe.get("CurrentHealth")
                 prev_tok = None
-                for n_st, st in enumerate(steps):
+                n_st = 0
+                while n_st < len(steps):
+                    st = steps[n_st]
                     tok = st[2]
+                    # A run of the same THROW token is one chain (214T x4).
+                    # Press it straight through, each part as soon as the
+                    # animation moves on. Observing between the parts spends
+                    # the window: the chain dropped after its second grab and
+                    # the rest came out as throws from neutral, 182 and 8138
+                    # where the demo has 8158 and 8160. Strike runs (the P,P,P
+                    # of P,P,P,4,6P) keep the ordinary path - they are string
+                    # branches with their own recorded gaps, and driving them
+                    # from the animation instead broke them.
+                    run_len = 1
+                    while (n_st + run_len < len(steps)
+                           and steps[n_st + run_len][2] == tok):
+                        run_len += 1
+                    if run_len > 1 and st[1] == "throw":
+                        mvs_c = cc_mv.get(text) or []
+                        got_c, again_c = [], 0
+                        before = me.get("CurrentMove")
+                        for part in range(run_len):
+                            if part:
+                                # the window is at the END of each part, so
+                                # press until the animation moves on
+                                mv_w = me.get("CurrentMove")
+                                t_w, n_w, t_lw = time.perf_counter(), 0, 0.0
+                                while time.perf_counter() - t_w < 1.1:
+                                    me.refresh()
+                                    if (me.get("MoveKind") == 0
+                                            or me.get("CurrentMove") != mv_w):
+                                        break
+                                    if n_w < 8 and (n_w == 0 or
+                                                    time.perf_counter() - t_lw > 0.12):
+                                        combo_press(st)
+                                        t_lw = time.perf_counter()
+                                        n_w += 1
+                                    time.sleep(0.004)
+                                again_c += max(0, n_w - 1)
+                            else:
+                                combo_press(st)
+                            t_s = time.perf_counter()
+                            while time.perf_counter() - t_s < 0.35:
+                                me.refresh()
+                                mv_n, k_n = me.get("CurrentMove"), me.get("MoveKind")
+                                if k_n != 0 and mv_n != before:
+                                    got_c.append(int(mv_n))
+                                    break
+                                time.sleep(0.002)
+                            if got_c:
+                                before = got_c[-1]
+                        for k_i in range(run_len):
+                            idx = n_st + k_i
+                            want_c = (mvs_c[idx] if idx < len(mvs_c)
+                                      and mvs_c[idx] else None)
+                            g_one = got_c[k_i] if k_i < len(got_c) else None
+                            show = f"{tok}(+{again_c})" if (again_c and not k_i) else tok
+                            if g_one is None:
+                                mark = "NOTHING CAME OUT"
+                            elif want_c is None:
+                                mark = "(this part is not in the demo)"
+                            elif want_c == g_one:
+                                mark = "ok"
+                            else:
+                                mark = f"WRONG - expected {want_c}"
+                            print(f"      {show:<8} -> "
+                                  f"{(str(g_one) if g_one else '-'):<22} {mark}")
+                        prev_tok = tok
+                        t_step = btn_at[0]
+                        n_st += run_len
+                        continue
                     if n_st and me.get("MoveKind") not in (4, 5, 6):
                         # ...but not while a throw or hold is playing: that
                         # chain finds its own window by re-pressing below, and
@@ -1933,6 +2002,7 @@ def main():
                     else:
                         mark = f"WRONG - expected {want}"
                     print(f"      {tok_show:<8} -> {'>'.join(map(str, got)) or '-':<22} {mark}")
+                    n_st += 1
                 dealt = hp0 - foe.get("CurrentHealth")
                 print(f"      damage to the dummy: {dealt if 0 <= dealt < 500 else '?'}\n")
                 time.sleep(1.0)
