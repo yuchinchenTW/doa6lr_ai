@@ -1846,7 +1846,25 @@ def main():
                             # the single re-press landing after the stance had
                             # moved on. So: the same timing it uses, and room
                             # for more than one retry.
-                            left_t = max(0.04, gap_t - 0.08) - (time.perf_counter() - t_step)
+                            # Out of a stance (MoveKind 13) the follow-up
+                            # goes at a flat 0.04 s. --probe-step 7 swept the
+                            # closing K of the Shuffle from 0.04 s to 0.34 s in
+                            # 0.02 s steps: 0.04 s gave 8056 and every delay
+                            # from 0.06 s up gave NOTHING AT ALL, so the press
+                            # is not late there, it is ignored. At 0.04 s the
+                            # move still arrived 0.232 s later against the
+                            # demo's 0.234 s, so the input buffers and pressing
+                            # early does not make the move early.
+                            # This is scoped to the stance on purpose. Applied
+                            # to every short gap it broke the string from its
+                            # fifth input on, because 4K is pressed out of a
+                            # punch, not out of the stance, and it wants the
+                            # recorded timing.
+                            if me.get("MoveKind") == 13:
+                                left_t = 0.04 - (time.perf_counter() - t_step)
+                            else:
+                                left_t = (max(0.04, gap_t - 0.08)
+                                          - (time.perf_counter() - t_step))
                             if left_t > 0:
                                 time.sleep(left_t)
                     before = me.get("CurrentMove")
