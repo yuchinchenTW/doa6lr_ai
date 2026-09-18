@@ -1307,7 +1307,6 @@ def main():
             time.sleep(0.10)
             inj.down(horiz)
             time.sleep(0.15)
-            btn_at[0] = time.perf_counter()
             inj.down(vert + [btn])
         elif horiz and vert and dy < 0:
             # A DOWN diagonal needs both directions in place before the
@@ -1316,7 +1315,6 @@ def main():
             # diagonals (9P, 9K) were fine.
             inj.down(horiz + vert)
             time.sleep(0.05)
-            btn_at[0] = time.perf_counter()
             inj.down([btn])
         else:
             if horiz:
@@ -1326,8 +1324,13 @@ def main():
                 time.sleep(0.05 if in_string[0] else 0.017)
             # the vertical goes down WITH the button (down alone a frame ahead
             # is a sidestep: 2T came out as id 32)
-            btn_at[0] = time.perf_counter()
             inj.down(vert + [btn])
+        # Every branch above has just put the button down, so this one line
+        # is the button instant for all of them and none of them had to be
+        # touched. The dash recipe in particular is byte for byte what it was
+        # at 0ac5804, where it was measured, and at 9d021d7, 51e5045 and
+        # f7430ef, where it was confirmed.
+        btn_at[0] = time.perf_counter()
         # A string follow-up needs a longer press than a single move does.
         # holdbot held a button for --press (0.020 s, 1.2 frames at 60 fps) and
         # the second P of HK,PPPP vanished while comboreplay, holding 0.045 s,
