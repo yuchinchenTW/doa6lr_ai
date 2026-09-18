@@ -1856,9 +1856,14 @@ def main():
                         # one on a short gap: none at all lost the fourth
                         # input of 66P,8P,P,P,4K... entirely, and more than one
                         # buffers a spare press that eats the input after it
+                        # ...and close together on a short gap. At 0.07 s
+                        # the second P of HK,P,P,P,P needed two retries and so
+                        # went out at 0.28 s, where the demo has it at 0.218:
+                        # the spacing, not the first press, was the floor.
                         elif (not got and again_t < (12 if gap_long[0] else 3)
                               and me.get("MoveKind") not in (4, 5, 6)
-                              and time.perf_counter() - t_ag > 0.07):
+                              and time.perf_counter() - t_ag
+                              > (0.07 if gap_long[0] else 0.045)):
                             combo_press(st)
                             again_t += 1
                             t_ag = time.perf_counter()
@@ -3126,8 +3131,16 @@ def main():
                     waiting_ok = (my_idle or in_stance or (my_type_now == MT_STRIKE
                                               and my_mv_tick == combo["last_mv"]
                                               and me.get("Phase") >= PH_RECOVERY))
+                    # the gap the demo recorded before the token we are
+                    # still waiting on, which sets both how often we re-press
+                    # and how many times
+                    dts_r = cc_dt.get(combo.get("recipe"))
+                    i_r = max(0, combo["i"] - 1)
+                    gap_r = dts_r[i_r] if dts_r and i_r < len(dts_r) else 0.0
+                    long_r = gap_r > 0.4
                     if combo.get("await_") and waiting_ok and (foe_open or nxt_is_throw) \
-                            and now - combo["t"] > 0.07 and d_c <= args.combo_range:
+                            and now - combo["t"] > (0.07 if long_r else 0.045) \
+                            and d_c <= args.combo_range:
                         # not taken yet: the buffer window is the tail of the
                         # recovery, so keep re-pressing every ~2 frames until
                         # our move id changes. Give up by TIME and by COUNT:
@@ -3138,11 +3151,8 @@ def main():
                         # after it, which turned 4K into the P string's third
                         # hit. 0.5 s after we are idle, or 1.2 s in all.
                         t_first = combo.get("t_first") or combo["t"]
-                        dts_r = cc_dt.get(combo.get("recipe"))
-                        i_r = max(0, combo["i"] - 1)
-                        gap_r = dts_r[i_r] if dts_r and i_r < len(dts_r) else 0.0
                         if (now - t_first > 1.2) or (my_idle and now - t_first > 0.5) \
-                                or combo.get("again", 0) >= (12 if gap_r > 0.4 else 3):
+                                or combo.get("again", 0) >= (12 if long_r else 3):
                             combo_reset(f"{combo.get('tok', '?')} not accepted "
                                         f"({combo.get('again', 0) + 1}x, {now - t_first:.2f}s)")
                         else:
