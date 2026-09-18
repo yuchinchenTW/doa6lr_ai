@@ -2070,7 +2070,7 @@ def main():
                               f"{'>'.join(map(str, got)) or '-':<22} {mark}{when}")
                     elif n_st == args.probe_step:
                         print(f"      {probe_off:.2f}s  {tok:<6} -> "
-                              f"{'>'.join(map(str, got)) or '-':<22} {mark}")
+                              f"{'>'.join(map(str, got)) or '-':<22} {mark}{when}")
                     n_st += 1
                 dealt = hp0 - foe.get("CurrentHealth")
                 if probe_off is None:
