@@ -14,12 +14,17 @@ evening of reverts:
 |---|---|---|
 | `236P` | cleared | not tested |
 | `214T,214T,214T,214T` | cleared | **4/4 at f0693be** |
-| `HK,P,P,P,P` | cleared | **5/5 at bb86dac** (with +2 re-press) |
+| `HK,P,P,P,P` | cleared | **5/5 at a4c2cc8**, no re-press needed |
 | `8K,S,6S,6S,6S` | cleared | 3rd input drops |
 | `3K,3K,66P` | cleared | **3/3**, dash travel at the game's ceiling |
 | `P,P,P,4,6P` | cleared | **5/5** (176>8045>8046>8118>8078) |
 | `9K,6P,6P,6P` | cleared (wall only) | **4/4** (189>177>8065>8066) |
 | `66P,8P,P,P,4K,K,K,K` | cleared | **8/8** (8077>190>176>8045>8053>8054>8055>8056) |
+
+Everything except `HK,P,P,P,P` passed BEFORE the commit that made every
+interval measure from the button rather than from the press routine
+returning. That moved every gap in by about 0.09 s, so those rows are stale
+until they are run again.
 
 ## What the input code has to get right
 
