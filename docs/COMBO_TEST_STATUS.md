@@ -80,8 +80,17 @@ again, separately, in holdbot:
   one press eaten and a single retry landing after the stance had moved on.
   Twelve retries is too many - the spare presses buffer and eat the input after
   them, which turned a 4K into the P string's third hit.
-* every interval is measured from the instant the BUTTON went down, not from
-  when the press routine returned. It holds the button 0.045 s, so timing from
+* every interval is measured from the instant the previous move APPEARED, not
+  from the button that asked for it and not from when the press routine
+  returned. The distance between a button and its move is not the same for
+  every move, and on the Shuffle that difference was the whole bug: the K that
+  makes 8055 goes out 0.044 s after the previous button, but 8055 does not
+  appear until 0.157 s later, so timing the next K from the button pressed it
+  before 8055 existed. All three presses were eaten and the stance had ended
+  by the time one landed, giving a standing kick, 179 instead of 8056.
+  comboreplay has the same rule and that is why it clears the stage: it will
+  not press until the previous step's move id is on screen.
+* the press routine itself holds the button 0.045 s before returning. It holds the button 0.045 s, so timing from
   the return counted that hold twice - once in the wait before the next token
   and once in every re-press - and put the second P of `HK,P,P,P,P` at 0.36 s
   where the demo has it at 0.218
