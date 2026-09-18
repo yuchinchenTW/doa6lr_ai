@@ -1859,7 +1859,12 @@ def main():
                         # way the engine does. Waiting for neutral put the
                         # second part of a four-part throw 0.9 s late, where
                         # the demo pressed it after 0.22 s.
-                        if got and time.perf_counter() - t_s > 0.12:
+                        # Stop watching as soon as the move is out. This
+                        # 0.12 s was the real floor on how fast the next input
+                        # could go: the 4K's own gap is 0.171 s and half of it
+                        # is 0.086, so the observation, not the timing, was
+                        # holding it back.
+                        if got and time.perf_counter() - t_s > 0.05:
                             break
                         if k_n == 0 and time.perf_counter() - t_s > 0.4:
                             break
