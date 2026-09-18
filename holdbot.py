@@ -1768,7 +1768,12 @@ def main():
                 prev_tok = None
                 for n_st, st in enumerate(steps):
                     tok = st[2]
-                    if n_st:
+                    if n_st and me.get("MoveKind") not in (4, 5, 6):
+                        # ...but never while a throw or hold is playing. That
+                        # chain finds its own window by re-pressing below, and
+                        # sleeping the gap in front of a part misses it: the
+                        # 214T chain dropped after its second grab and the rest
+                        # came out as throws from neutral.
                         # The demo's own gap is the whole rule. Our side's
                         # Phase field is not reliable, so waiting for RECOVERY
                         # fell through to "MoveKind 0" - the end of the whole
@@ -1823,7 +1828,8 @@ def main():
                             if left_t > 0:
                                 time.sleep(left_t)
                     before = me.get("CurrentMove")
-                    if n_st and me.get("MoveKind") in (4, 5, 6):
+                    was_throw = bool(n_st) and me.get("MoveKind") in (4, 5, 6)
+                    if was_throw:
                         # a throw or hold is playing: its window is at the END
                         # of each part (0.20, 0.53, 0.48 s in for the 214T
                         # chain), so press until the animation moves on
@@ -1856,7 +1862,8 @@ def main():
                         # one on a short gap: none at all lost the fourth
                         # input of 66P,8P,P,P,4K... entirely, and more than one
                         # buffers a spare press that eats the input after it
-                        elif (not got and again_t < (12 if gap_long[0] else 3)
+                        elif (not got and not was_throw
+                              and again_t < (12 if gap_long[0] else 3)
                               and me.get("MoveKind") not in (4, 5, 6)
                               and time.perf_counter() - t_ag > 0.07):
                             combo_press(st)
@@ -1871,7 +1878,12 @@ def main():
                         # could go: the 4K's own gap is 0.171 s and half of it
                         # is 0.086, so the observation, not the timing, was
                         # holding it back.
-                        if got and time.perf_counter() - t_s > 0.05:
+                        # 0.12 s for a throw part: that is what f0693be
+                        # watched for when the 214T chain last ran 4/4, and
+                        # cutting it to 0.05 s left the next part pressing into
+                        # an animation that had not finished changing.
+                        if got and time.perf_counter() - t_s > (
+                                0.12 if was_throw else 0.05):
                             break
                         if k_n == 0 and time.perf_counter() - t_s > 0.4:
                             break
