@@ -1263,16 +1263,16 @@ def main():
             # third of a second of nothing, and only then 6+P. Holding forward
             # continuously - however long - gave a plain 6P (177) every time;
             # the gap between the two is what the game reads as a dash.
+            # 6, 6, then P on its own - not 6 then 6+P. The two taps are the
+            # dash; the button comes after it with no direction held.
             inj.down(horiz)
             time.sleep(0.05)
             inj.up(horiz)
             time.sleep(0.05)
-            inj.down(horiz)        # a second tap: two of them before the pause
+            inj.down(horiz)
             time.sleep(0.05)
             inj.up(horiz)
             time.sleep(0.30)
-            inj.down(horiz)
-            time.sleep(0.017)
             inj.down(vert + [btn])
         elif horiz and vert and dy < 0:
             # A DOWN diagonal needs both directions in place before the
