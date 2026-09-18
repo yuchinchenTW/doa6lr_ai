@@ -514,11 +514,10 @@ def main():
                          "dash move (e.g. 66P): tries every combination of "
                          "pre-wait, tap length and gap from neutral and prints "
                          "the move id each one produced. Nothing else runs.")
-    ap.add_argument("--test-distance", type=float, default=70.0,
-                    help="walk to this distance before each --test-combo run "
-                         "(0 to stay put). The Combo Challenge is performed at "
-                         "point blank, and a string that starts far away has "
-                         "its later hits out of reach.")
+    ap.add_argument("--test-distance", type=float, default=0.0,
+                    help="walk to this distance before each --test-combo run. "
+                         "Off by default: 66P and 8P reach on their own, and "
+                         "walking in first changed how the string played out.")
     ap.add_argument("--test-repeat", type=int, default=1,
                     help="how many times to run each string in --test-combo")
     ap.add_argument("--dry-run", action="store_true")
@@ -1821,8 +1820,11 @@ def main():
                             # continuation instead: 9K's follow-up 6P came out
                             # as 8084 rather than the standing 177, and the
                             # rest of the combo went with it.
+                            # ...but never later than the demo itself, less
+                            # the input lag. Waiting for neutral with slack on
+                            # top put the P after 66P,8P visibly late.
                             t_g = time.perf_counter()
-                            while time.perf_counter() - t_g < gap_t + 0.25:
+                            while time.perf_counter() - t_g < gap_t - 0.05:
                                 me.refresh()
                                 if me.get("MoveKind") == 0:
                                     break
