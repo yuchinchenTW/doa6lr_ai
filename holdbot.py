@@ -1805,6 +1805,8 @@ def main():
                             left_t = max(0.04, gap_t - 0.06) - (time.perf_counter() - t_step)
                             if left_t > 0:
                                 time.sleep(left_t)
+                    d_before, _ = distance()
+                    hp_b = foe.get("CurrentHealth")
                     before = me.get("CurrentMove")
                     if n_st and me.get("MoveKind") in (4, 5, 6):
                         # a throw or hold is playing: its window is at the END
@@ -1887,7 +1889,13 @@ def main():
                         mark = "ok"
                     else:
                         mark = f"WRONG - expected {want}"
-                    print(f"      {tok_show:<8} -> {'>'.join(map(str, got)) or '-':<22} {mark}")
+                    d_hit = hp_b - foe.get("CurrentHealth")
+                    # distance when the input went out, and what it took off:
+                    # an input that comes out but does not connect is a
+                    # spacing problem, not a timing one
+                    print(f"      {tok_show:<8} -> {'>'.join(map(str, got)) or '-':<22} {mark}"
+                          + (f"   [dist {d_before:.0f}" if d_before else "   [dist ?")
+                          + (f", hit {d_hit}]" if 0 < d_hit < 500 else ", MISSED]"))
                 dealt = hp0 - foe.get("CurrentHealth")
                 print(f"      damage to the dummy: {dealt if 0 <= dealt < 500 else '?'}\n")
                 time.sleep(1.0)
