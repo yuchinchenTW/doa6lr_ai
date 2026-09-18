@@ -514,12 +514,6 @@ def main():
                          "dash move (e.g. 66P): tries every combination of "
                          "pre-wait, tap length and gap from neutral and prints "
                          "the move id each one produced. Nothing else runs.")
-    ap.add_argument("--probe-step", type=int, default=None, metavar="N",
-                    help="with --test-combo: run the string up to token N with "
-                         "the usual timing, then press token N alone at a "
-                         "sweep of delays with no retries, and print the move "
-                         "each delay produced. N is 0-based, so the last input "
-                         "of an eight-token string is 7.")
     ap.add_argument("--test-repeat", type=int, default=1,
                     help="how many times to run each string in --test-combo")
     ap.add_argument("--dry-run", action="store_true")
@@ -1244,12 +1238,6 @@ def main():
         return r
 
     in_string = [False]            # a follow-up, not the first input
-    # The instant the BUTTON went down, which is the only timestamp a recorded
-    # gap can be measured against. combo_press returns 0.045 s later (it holds
-    # the button that long) and a dash returns almost a second later, so timing
-    # from the call's return counted the hold twice: once in the wait before
-    # the next token and once in every re-press interval.
-    btn_at = [0.0]
 
     def combo_press(step):
         (dx, dy), btn, tok, motion = (step + ([],))[:4]
@@ -1262,9 +1250,6 @@ def main():
                 time.sleep(0.18)
                 inj.up(names_s)
                 dir_touched[0] = time.perf_counter()
-                # no button here, but the next token still times from
-                # the end of this one, the way it did before btn_at
-                btn_at[0] = dir_touched[0]
             return tok
         dash = bool(motion) and motion[-1] == ((dx, dy))
         for mdx, mdy in motion:                      # 236P: tap 2, tap 3, then 6+P
@@ -1313,7 +1298,6 @@ def main():
             time.sleep(0.10)
             inj.down(horiz)
             time.sleep(0.15)
-            btn_at[0] = time.perf_counter()
             inj.down(vert + [btn])
         elif horiz and vert and dy < 0:
             # A DOWN diagonal needs both directions in place before the
@@ -1322,7 +1306,6 @@ def main():
             # diagonals (9P, 9K) were fine.
             inj.down(horiz + vert)
             time.sleep(0.05)
-            btn_at[0] = time.perf_counter()
             inj.down([btn])
         else:
             if horiz:
@@ -1332,7 +1315,6 @@ def main():
                 time.sleep(0.05 if in_string[0] else 0.017)
             # the vertical goes down WITH the button (down alone a frame ahead
             # is a sidestep: 2T came out as id 32)
-            btn_at[0] = time.perf_counter()
             inj.down(vert + [btn])
         # A string follow-up needs a longer press than a single move does.
         # holdbot held a button for --press (0.020 s, 1.2 frames at 60 fps) and
@@ -1768,17 +1750,8 @@ def main():
         print(f"test-combo: {len(strings)} string(s) for "
               f"{CHAR_NAMES.get(my_char, my_char)}. Stand in Training with the "
               f"dummy in front of you. Ctrl-C to stop.\n")
-        # Guessing one delay per round trip is what cost the evening the
-        # dash cost, and --probe-dash ended that by walking the space. This
-        # does the same for one token inside a string: everything before it
-        # goes out on the timing that already works, and the token itself is
-        # pressed once, at each delay in turn.
-        offsets = ([round(0.04 + 0.02 * k, 3) for k in range(16)]
-                   if args.probe_step is not None else [None])
         for text in strings:
-            for run_n in range(len(offsets) if args.probe_step is not None
-                               else args.test_repeat):
-                probe_off = offsets[run_n] if args.probe_step is not None else None
+            for run_n in range(args.test_repeat):
                 t_wait = time.perf_counter()
                 while time.perf_counter() - t_wait < 4.0:     # both on their feet
                     me.refresh(); foe.refresh()
@@ -1790,105 +1763,12 @@ def main():
                 gap_long = [True]
                 steps = parse_combo(text)
                 dts_t = cc_dt.get(text) or []
-                if probe_off is None:
-                    print(f"  {text}"
-                          + (f"  (run {run_n + 1})" if args.test_repeat > 1 else ""))
-                elif not run_n:
-                    print(f"  {text}: token {args.probe_step} "
-                          f"({steps[args.probe_step][2]}) at each delay")
+                print(f"  {text}" + (f"  (run {run_n + 1})" if args.test_repeat > 1 else ""))
                 hp0 = foe.get("CurrentHealth")
                 prev_tok = None
-                # When each move APPEARED. The demo's recorded gap is the
-                # interval between two move ids showing up, so this is the
-                # same measurement and the two can be compared directly.
-                # Which input is late is then a number, not a judgement call.
-                prev_app = None
-                n_st = 0
-                while n_st < len(steps):
-                    st = steps[n_st]
+                for n_st, st in enumerate(steps):
                     tok = st[2]
-                    # A run of the same THROW token is one chain (214T x4).
-                    # Press it straight through, each part as soon as the
-                    # animation moves on. Observing between the parts spends
-                    # the window: the chain dropped after its second grab and
-                    # the rest came out as throws from neutral, 182 and 8138
-                    # where the demo has 8158 and 8160. Strike runs (the P,P,P
-                    # of P,P,P,4,6P) keep the ordinary path - they are string
-                    # branches with their own recorded gaps, and driving them
-                    # from the animation instead broke them.
-                    run_len = 1
-                    while (n_st + run_len < len(steps)
-                           and steps[n_st + run_len][2] == tok):
-                        run_len += 1
-                    if run_len > 1 and st[1] == "throw":
-                        mvs_c = cc_mv.get(text) or []
-                        got_c, again_c, app_c = [], 0, []
-                        before = me.get("CurrentMove")
-                        for part in range(run_len):
-                            if part:
-                                # the window is at the END of each part, so
-                                # press until the animation moves on
-                                mv_w = me.get("CurrentMove")
-                                t_w, n_w, t_lw = time.perf_counter(), 0, 0.0
-                                while time.perf_counter() - t_w < 1.1:
-                                    me.refresh()
-                                    if (me.get("MoveKind") == 0
-                                            or me.get("CurrentMove") != mv_w):
-                                        break
-                                    if n_w < 8 and (n_w == 0 or
-                                                    time.perf_counter() - t_lw > 0.12):
-                                        combo_press(st)
-                                        t_lw = time.perf_counter()
-                                        n_w += 1
-                                    time.sleep(0.004)
-                                again_c += max(0, n_w - 1)
-                            else:
-                                combo_press(st)
-                            t_s = time.perf_counter()
-                            while time.perf_counter() - t_s < 0.35:
-                                me.refresh()
-                                mv_n, k_n = me.get("CurrentMove"), me.get("MoveKind")
-                                if k_n != 0 and mv_n != before:
-                                    got_c.append(int(mv_n))
-                                    app_c.append(time.perf_counter())
-                                    break
-                                time.sleep(0.002)
-                            if got_c:
-                                before = got_c[-1]
-                        for k_i in range(run_len):
-                            idx = n_st + k_i
-                            want_c = (mvs_c[idx] if idx < len(mvs_c)
-                                      and mvs_c[idx] else None)
-                            g_one = got_c[k_i] if k_i < len(got_c) else None
-                            show = f"{tok}(+{again_c})" if (again_c and not k_i) else tok
-                            if g_one is None:
-                                mark = "NOTHING CAME OUT"
-                            elif want_c is None:
-                                mark = "(this part is not in the demo)"
-                            elif want_c == g_one:
-                                mark = "ok"
-                            else:
-                                mark = f"WRONG - expected {want_c}"
-                            if k_i and k_i < len(app_c) and idx < len(dts_t):
-                                when_c = (f"  {app_c[k_i] - app_c[k_i - 1]:.3f}s "
-                                          f"(demo {dts_t[idx]:.3f})")
-                            else:
-                                when_c = ""
-                            print(f"      {show:<8} -> "
-                                  f"{(str(g_one) if g_one else '-'):<22} "
-                                  f"{mark}{when_c}")
-                        prev_tok = tok
-                        prev_app = app_c[-1] if app_c else None
-                        t_step = btn_at[0]
-                        n_st += run_len
-                        continue
-                    if n_st and me.get("MoveKind") not in (4, 5, 6):
-                        # ...but not while a throw or hold is playing: that
-                        # chain finds its own window by re-pressing below, and
-                        # sleeping the recorded gap in front of each part
-                        # missed it entirely (the 214T chain dropped after its
-                        # second grab and the rest came out as throws from
-                        # neutral: 182 and 8138 instead of 8158 and 8160).
+                    if n_st:
                         # The demo's own gap is the whole rule. Our side's
                         # Phase field is not reliable, so waiting for RECOVERY
                         # fell through to "MoveKind 0" - the end of the whole
@@ -1900,16 +1780,8 @@ def main():
                         # opens in its RECOVERY - sleeping the whole 0.735 s
                         # after H+K put the P visibly late.
                         gap_t = dts_t[n_st] if n_st < len(dts_t) else 0.2
-                        if probe_off is not None and n_st == args.probe_step:
-                            # the swept delay replaces the rule entirely
-                            left_p = probe_off - (time.perf_counter() - t_step)
-                            if left_p > 0:
-                                time.sleep(left_p)
-                            gap_t = 0.0
-                            gap_long[0] = False
                         gap_long[0] = gap_t > 0.4
-                        if gap_long[0] and not (probe_off is not None
-                                                and n_st == args.probe_step):
+                        if gap_long[0]:
                             # A long gap means the demo waited for the previous
                             # move to END. Pressing at half of it lands inside
                             # the animation and the game gives the STRING
@@ -1947,22 +1819,7 @@ def main():
                             # the single re-press landing after the stance had
                             # moved on. So: the same timing it uses, and room
                             # for more than one retry.
-                            # --probe-step 7 swept the closing K of the
-                            # Shuffle from 0.04 s to 0.34 s in 0.02 s steps.
-                            # Exactly one delay produced the move: 0.04 s gave
-                            # 8056, and 0.06 s and everything after it gave
-                            # nothing at all. The press is not late at 0.06 s,
-                            # it is ignored.
-                            # At 0.04 s the move still came out 0.232 s later,
-                            # against the demo's 0.234 s. So the input BUFFERS:
-                            # pressing early does not make the move early, it
-                            # just makes sure the game takes it, and the move
-                            # arrives on the demo's own schedule anyway.
-                            # That is why "the gap less 0.08" was wrong here -
-                            # 0.154 s was past the window - and it is why the
-                            # other short gaps happened to work: 0.044 s and
-                            # 0.091 s are early enough by accident.
-                            left_t = 0.04 - (time.perf_counter() - t_step)
+                            left_t = max(0.04, gap_t - 0.08) - (time.perf_counter() - t_step)
                             if left_t > 0:
                                 time.sleep(left_t)
                     before = me.get("CurrentMove")
@@ -1982,18 +1839,15 @@ def main():
                             time.sleep(0.004)
                     else:
                         combo_press(st)
-                    t_step = btn_at[0]
+                    t_step = time.perf_counter()
                     got, t_s = [], time.perf_counter()
                     again_t, t_ag = 0, time.perf_counter()
-                    t_app = None
                     while time.perf_counter() - t_s < 0.9:
                         me.refresh()
                         mv_n, k_n = me.get("CurrentMove"), me.get("MoveKind")
                         fresh = mv_n != before
                         if k_n != 0 and fresh and (not got or got[-1] != mv_n):
                             got.append(int(mv_n))
-                            if t_app is None:
-                                t_app = time.perf_counter()
                         # Nothing out yet: press again, the way comboreplay
                         # does. A follow-up that lands in the previous move's
                         # active frames is simply eaten, and one press per
@@ -2002,27 +1856,9 @@ def main():
                         # one on a short gap: none at all lost the fourth
                         # input of 66P,8P,P,P,4K... entirely, and more than one
                         # buffers a spare press that eats the input after it
-                        # Measured from the END of the press, never from
-                        # the button: timing the retries from the button fitted
-                        # four presses inside the long gap of 66P,8P,P,P,4K...
-                        # and the spares buffered and surfaced as the P
-                        # string's third hit where the 4K belonged, 8046
-                        # instead of 8053.
-                        # A LONG gap keeps 0.07 (0.115 s apart in practice).
-                        # That is where spare presses do damage, and two
-                        # retries is all that window ever needed.
-                        # A SHORT gap gets 0.045 (0.09 s apart). The closing K
-                        # of the Shuffle had its first press eaten and its one
-                        # retry landed 0.035 s after the stance had already
-                        # moved on, so it came out as a standing kick, 179
-                        # instead of 8056. The window is between the two.
-                        elif (not got
-                              and not (probe_off is not None
-                                       and n_st == args.probe_step)
-                              and again_t < (12 if gap_long[0] else 3)
+                        elif (not got and again_t < (12 if gap_long[0] else 3)
                               and me.get("MoveKind") not in (4, 5, 6)
-                              and time.perf_counter() - t_ag
-                              > (0.07 if gap_long[0] else 0.045)):
+                              and time.perf_counter() - t_ag > 0.07):
                             combo_press(st)
                             again_t += 1
                             t_ag = time.perf_counter()
@@ -2073,24 +1909,9 @@ def main():
                         mark = "ok"
                     else:
                         mark = f"WRONG - expected {want}"
-                    if t_app and prev_app and n_st < len(dts_t):
-                        when = (f"  {t_app - prev_app:.3f}s "
-                                f"(demo {dts_t[n_st]:.3f})")
-                    else:
-                        when = ""
-                    if t_app:
-                        prev_app = t_app
-                    if probe_off is None:
-                        print(f"      {tok_show:<8} -> "
-                              f"{'>'.join(map(str, got)) or '-':<22} {mark}{when}")
-                    elif n_st == args.probe_step:
-                        print(f"      {probe_off:.2f}s  {tok:<6} -> "
-                              f"{'>'.join(map(str, got)) or '-':<22} {mark}{when}")
-                    n_st += 1
+                    print(f"      {tok_show:<8} -> {'>'.join(map(str, got)) or '-':<22} {mark}")
                 dealt = hp0 - foe.get("CurrentHealth")
-                if probe_off is None:
-                    print(f"      damage to the dummy: "
-                          f"{dealt if 0 <= dealt < 500 else '?'}\n")
+                print(f"      damage to the dummy: {dealt if 0 <= dealt < 500 else '?'}\n")
                 time.sleep(1.0)
         inj.release_all()
         return
@@ -3305,28 +3126,16 @@ def main():
                     waiting_ok = (my_idle or in_stance or (my_type_now == MT_STRIKE
                                               and my_mv_tick == combo["last_mv"]
                                               and me.get("Phase") >= PH_RECOVERY))
-                    # the gap the demo recorded before the token we are
-                    # still waiting on, which sets both how often we re-press
-                    # and how many times
-                    dts_r = cc_dt.get(combo.get("recipe"))
-                    i_r = max(0, combo["i"] - 1)
-                    gap_r = dts_r[i_r] if dts_r and i_r < len(dts_r) else 0.0
-                    long_r = gap_r > 0.4
                     if combo.get("await_") and waiting_ok and (foe_open or nxt_is_throw) \
-                            and now - combo["t"] > 0.07 \
-                            and d_c <= args.combo_range:
+                            and now - combo["t"] > 0.04 and d_c <= args.combo_range:
                         # not taken yet: the buffer window is the tail of the
                         # recovery, so keep re-pressing every ~2 frames until
-                        # our move id changes. Give up by TIME and by COUNT:
-                        # a launcher's recovery (8K, 8144) outlasted 6 presses
+                        # our move id changes. Give up by TIME, not count: a
+                        # launcher's recovery (8K, 8144) outlasted 6 presses
                         # and the juggle 6P was abandoned before we were even
-                        # idle, so a long gap gets twelve tries - but on a
-                        # short one a fourth press buffers and eats the input
-                        # after it, which turned 4K into the P string's third
-                        # hit. 0.5 s after we are idle, or 1.2 s in all.
+                        # idle - 0.5 s after we are idle, or 1.2 s in all
                         t_first = combo.get("t_first") or combo["t"]
-                        if (now - t_first > 1.2) or (my_idle and now - t_first > 0.5) \
-                                or combo.get("again", 0) >= (12 if long_r else 3):
+                        if (now - t_first > 1.2) or (my_idle and now - t_first > 0.5):
                             combo_reset(f"{combo.get('tok', '?')} not accepted "
                                         f"({combo.get('again', 0) + 1}x, {now - t_first:.2f}s)")
                         else:
@@ -3352,26 +3161,15 @@ def main():
                     elif ready or (foe_open and my_idle and d_c <= args.combo_range
                                    and now - combo["t"] > 0.03):
                         do_press = True
-                        # The timings --test-combo settled on against Minato's
-                        # eight-input Combo Challenge string:
-                        #   long gap (the demo waited for the previous move to
-                        #     END): wait for our own move to finish, but no
-                        #     later than three quarters of the gap - a juggle
-                        #     follow-up buffers during the recovery, and the
-                        #     demo's own timing is visibly late;
-                        #   short gap (a string branch): the gap less 0.08 s.
-                        # Pressing at half of a LONG gap lands inside the
-                        # animation and the game answers with the previous
-                        # move's string continuation instead: 9K's follow-up 6P
-                        # came out as 8084 rather than the standing 177.
+                        # the demo's own interval, where we recorded one: H+K
+                        # runs 0.72 s and its follow-up comes after that, so
+                        # pressing as soon as the move appears loses the input
                         dts = cc_dt.get(combo.get("recipe"))
                         if dts and combo["i"] < len(dts):
-                            gap_c = dts[combo["i"]]
-                            since_c = now - combo["t"]
-                            if gap_c > 0.4:
-                                if my_kind != 0 and since_c < gap_c * 0.75:
-                                    do_press = False
-                            elif since_c < max(0.04, gap_c - 0.08):
+                            # half the demo's gap: the engine re-presses too,
+                            # and the buffer opens in the recovery
+                            need = dts[combo["i"]] * 0.5
+                            if need > 0.05 and now - combo["t"] < need:
                                 do_press = False
                     elif (my_type_now in (MT_HIT, MT_THROWN, MT_HOLD_HIT, 7)
                           and not in_stance and now - combo["t"] > 0.1):
@@ -3384,9 +3182,9 @@ def main():
                         in_string[0] = False
                         combo["i"] += 1
                         combo["last_mv"] = my_mv_tick
-                        combo["t"] = btn_at[0] or now
+                        combo["t"] = now
                         if not repress:
-                            combo["t_first"] = combo["t"]
+                            combo["t_first"] = now
                         combo["await_"] = True
                         combo["tok"] = tok
                         if not repress:

@@ -26,6 +26,31 @@ interval measure from the button rather than from the press routine
 returning. That moved every gap in by about 0.09 s, so those rows are stale
 until they are run again.
 
+## The harness is at f7430ef and nothing may be changed without a measurement
+
+`holdbot.py` was restored wholesale to f7430ef, the commit where
+`66P,8P,P,P,4K,K,K,K` ran 8/8. Everything a day of edits added to the test
+harness went with it, including `--probe-step` and the timing report.
+
+The rules listed below describe THAT commit. Several of the bullets were
+rewritten during those edits to describe rules the code no longer has; where a
+bullet cites a measurement, the measurement is real and worth keeping, but the
+rule it justified is not in the code.
+
+What the sweep actually established, and what is still unexplained:
+
+* the closing K of the Shuffle takes a press at 0.04 s and ignores every delay
+  from 0.06 s upward. At 0.04 s the move still arrived 0.232 s later against
+  the demo's 0.234 s, so the input buffers
+* making that the rule for every short gap broke the string from its fifth
+  input on, so the flat early press is wrong for the other tokens even though
+  it is right for this one
+* timing the gap from when the previous move appeared, rather than from the
+  button, broke it worse still
+
+So the closing K is a real defect in the f7430ef harness, it is understood, and
+no fix for it has been found that leaves the other seven inputs alone.
+
 ## What the input code has to get right
 
 Each of these was measured, and each was found once in comboreplay and then
