@@ -1080,6 +1080,11 @@ def main():
                 out.append((e, False))
         return out
 
+    try:
+        with open("combo_timing.json", encoding="utf-8") as _fh:
+            cc_pin = json.load(_fh)
+    except (OSError, ValueError):
+        cc_pin = {}     # recipe -> {input index: the delay --probe-step measured}
     cc_dt = {}          # recipe -> the demo's interval before each input
     cc_mv = {}          # recipe -> the move id each input made in the demo
     foe_span = {"x": [None, None], "z": [None, None]}
@@ -1807,8 +1812,23 @@ def main():
                         # opens in its RECOVERY - sleeping the whole 0.735 s
                         # after H+K put the P visibly late.
                         gap_t = dts_t[n_st] if n_st < len(dts_t) else 0.2
-                        gap_long[0] = gap_t > 0.4
-                        if gap_long[0]:
+                        # A delay that --probe-step actually measured for THIS
+                        # input of THIS string wins over any rule. Guessing a
+                        # category for the closing K of the Shuffle cost six
+                        # rounds: "every short gap" broke the string from its
+                        # fifth input, and "MoveKind 13" never fired at all
+                        # because a Shuffle kick does not report 13. A pinned
+                        # number cannot reach an input nobody measured.
+                        pin_t = (cc_pin.get(text) or {}).get(str(n_st))
+                        if pin_t is not None:
+                            left_p = float(pin_t) - (time.perf_counter() - t_step)
+                            if left_p > 0:
+                                time.sleep(left_p)
+                            gap_t = 0.0
+                        gap_long[0] = gap_t > 0.4 and pin_t is None
+                        if pin_t is not None:
+                            pass                      # already waited, above
+                        elif gap_long[0]:
                             # A long gap means the demo waited for the previous
                             # move to END. Pressing at half of it lands inside
                             # the animation and the game gives the STRING
@@ -1846,25 +1866,7 @@ def main():
                             # the single re-press landing after the stance had
                             # moved on. So: the same timing it uses, and room
                             # for more than one retry.
-                            # Out of a stance (MoveKind 13) the follow-up
-                            # goes at a flat 0.04 s. --probe-step 7 swept the
-                            # closing K of the Shuffle from 0.04 s to 0.34 s in
-                            # 0.02 s steps: 0.04 s gave 8056 and every delay
-                            # from 0.06 s up gave NOTHING AT ALL, so the press
-                            # is not late there, it is ignored. At 0.04 s the
-                            # move still arrived 0.232 s later against the
-                            # demo's 0.234 s, so the input buffers and pressing
-                            # early does not make the move early.
-                            # This is scoped to the stance on purpose. Applied
-                            # to every short gap it broke the string from its
-                            # fifth input on, because 4K is pressed out of a
-                            # punch, not out of the stance, and it wants the
-                            # recorded timing.
-                            if me.get("MoveKind") == 13:
-                                left_t = 0.04 - (time.perf_counter() - t_step)
-                            else:
-                                left_t = (max(0.04, gap_t - 0.08)
-                                          - (time.perf_counter() - t_step))
+                            left_t = max(0.04, gap_t - 0.08) - (time.perf_counter() - t_step)
                             if left_t > 0:
                                 time.sleep(left_t)
                     before = me.get("CurrentMove")
