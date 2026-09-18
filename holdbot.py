@@ -509,6 +509,11 @@ def main():
                          "match uses, and print the move id each token "
                          "produced against what the calibration expects. "
                          "Nothing else runs.")
+    ap.add_argument("--probe-dash", default=None, metavar="TOKEN",
+                    help="Training-mode search for the input that produces a "
+                         "dash move (e.g. 66P): tries every combination of "
+                         "pre-wait, tap length and gap from neutral and prints "
+                         "the move id each one produced. Nothing else runs.")
     ap.add_argument("--test-repeat", type=int, default=1,
                     help="how many times to run each string in --test-combo")
     ap.add_argument("--dry-run", action="store_true")
@@ -1631,6 +1636,72 @@ def main():
     inj.down, inj.up = _down, _up
     print(f"injector: {type(inj).__name__}"
           f"{'  (DRY RUN)' if args.dry_run else ''}")
+    if args.probe_dash:
+        # One round-trip per guessed timing was costing an evening. This walks
+        # the space instead: the same token, every plausible recipe, and the
+        # move id each one actually produced.
+        tok_d = args.probe_dash.strip().upper()
+        digits_d = "".join(ch for ch in tok_d if ch.isdigit())
+        btn_d = COMBO_BTN.get(tok_d[len(digits_d):])
+        if btn_d is None:
+            print(f"probe-dash: {tok_d!r} has no button")
+            return
+        fwd = dirs_to_names(1 if facing_state[0] else -1, 0)
+
+        def recipes():
+            for hold_s in (0.13, 0.20, 0.30, 0.45):
+                yield (f"hold {hold_s:.2f}s then {btn_d}",
+                       [("down", hold_s), ("btn", 0)])
+            for gap in (0.05, 0.10, 0.20, 0.30, 0.45, 0.60):
+                yield (f"tap, {gap:.2f}s, dir+{btn_d}",
+                       [("tap", 0.05), ("wait", gap), ("dirbtn", 0)])
+                yield (f"tap, {gap:.2f}s, {btn_d} alone",
+                       [("tap", 0.05), ("wait", gap), ("btn", 0)])
+            for gap in (0.05, 0.10, 0.20):
+                yield (f"tap, {gap:.2f}s, tap, dir+{btn_d}",
+                       [("tap", 0.05), ("wait", gap), ("tap", 0.05),
+                        ("wait", 0.02), ("dirbtn", 0)])
+                yield (f"tap, {gap:.2f}s, tap-hold 0.15s +{btn_d}",
+                       [("tap", 0.05), ("wait", gap), ("down", 0.15), ("btn", 0)])
+
+        print(f"probe-dash {tok_d}: standing in Training, one recipe at a time. "
+              f"Ctrl-C to stop.\n")
+        for name_d, steps_d in recipes():
+            t_w = time.perf_counter()
+            while time.perf_counter() - t_w < 3.0:
+                me.refresh()
+                if me.get("MoveKind") == 0:
+                    break
+                time.sleep(0.005)
+            time.sleep(0.35)
+            me.refresh()
+            before_d = me.get("CurrentMove")
+            for kind_d, secs in steps_d:
+                if kind_d == "tap":
+                    inj.down(fwd); time.sleep(secs); inj.up(fwd)
+                elif kind_d == "down":
+                    inj.down(fwd); time.sleep(secs)
+                elif kind_d == "wait":
+                    time.sleep(secs)
+                elif kind_d == "dirbtn":
+                    inj.down(fwd); time.sleep(0.017); inj.down([btn_d])
+                elif kind_d == "btn":
+                    inj.down([btn_d])
+            time.sleep(0.05)
+            inj.up([btn_d]); inj.up(fwd)
+            got_d, t_s = [], time.perf_counter()
+            while time.perf_counter() - t_s < 0.8:
+                me.refresh()
+                mv_d = me.get("CurrentMove")
+                if me.get("MoveKind") != 0 and mv_d != before_d and (
+                        not got_d or got_d[-1] != mv_d):
+                    got_d.append(int(mv_d))
+                time.sleep(0.002)
+            print(f"  {name_d:<34} -> {'>'.join(map(str, got_d)) or '-'}")
+            time.sleep(0.6)
+        inj.release_all()
+        return
+
     if args.test_combo:
         # ---- Training-mode check -------------------------------------------
         # Uses combo_press, the same code a match uses, so what this prints is
