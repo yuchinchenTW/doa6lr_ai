@@ -1807,7 +1807,12 @@ def main():
                             # string's third hit (8046) and ate the 4K.
                             # a little ahead of the demo, so the one allowed
                             # re-press still falls inside the string's window
-                            left_t = max(0.04, gap_t - 0.06) - (time.perf_counter() - t_step)
+                            # half the gap, not the gap less a fixed 0.06:
+                            # the second P of the juggle was still going out
+                            # late. The single re-press covers an early one;
+                            # more than one would buffer and eat the input
+                            # after it.
+                            left_t = max(0.04, gap_t * 0.5) - (time.perf_counter() - t_step)
                             if left_t > 0:
                                 time.sleep(left_t)
                     before = me.get("CurrentMove")
