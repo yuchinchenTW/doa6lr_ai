@@ -1812,10 +1812,14 @@ def main():
                             # late. The single re-press covers an early one;
                             # more than one would buffer and eat the input
                             # after it.
-                            # 0.4, not 0.5: the closing K of the Shuffle runs
-                            # at a 0.234 s gap and half of it still landed
-                            # after the stance had moved on.
-                            left_t = max(0.04, gap_t * 0.4) - (time.perf_counter() - t_step)
+                            # comboreplay clears this combo pressing at the
+                            # gap less ~0.08 s and re-pressing up to ten times.
+                            # Every fraction tried here (0.4, 0.5, gap-0.06)
+                            # lost the closing K the same way: one press eaten,
+                            # the single re-press landing after the stance had
+                            # moved on. So: the same timing it uses, and room
+                            # for more than one retry.
+                            left_t = max(0.04, gap_t - 0.08) - (time.perf_counter() - t_step)
                             if left_t > 0:
                                 time.sleep(left_t)
                     before = me.get("CurrentMove")
@@ -1852,7 +1856,7 @@ def main():
                         # one on a short gap: none at all lost the fourth
                         # input of 66P,8P,P,P,4K... entirely, and more than one
                         # buffers a spare press that eats the input after it
-                        elif (not got and again_t < (12 if gap_long[0] else 1)
+                        elif (not got and again_t < (12 if gap_long[0] else 3)
                               and me.get("MoveKind") not in (4, 5, 6)
                               and time.perf_counter() - t_ag > 0.07):
                             combo_press(st)
