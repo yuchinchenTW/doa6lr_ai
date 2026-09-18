@@ -1266,6 +1266,10 @@ def main():
             inj.down(horiz)
             time.sleep(0.05)
             inj.up(horiz)
+            time.sleep(0.05)
+            inj.down(horiz)        # a second tap: two of them before the pause
+            time.sleep(0.05)
+            inj.up(horiz)
             time.sleep(0.30)
             inj.down(horiz)
             time.sleep(0.017)
