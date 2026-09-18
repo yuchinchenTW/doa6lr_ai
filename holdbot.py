@@ -1074,11 +1074,14 @@ def main():
                 out.append((e["seq"], bool(e.get("wall"))))
                 if e.get("dt"):
                     cc_dt[e["seq"]] = [float(x) for x in e["dt"]]
+                if e.get("mv"):
+                    cc_mv[e["seq"]] = list(e["mv"])
             elif isinstance(e, str) and e:
                 out.append((e, False))
         return out
 
     cc_dt = {}          # recipe -> the demo's interval before each input
+    cc_mv = {}          # recipe -> the move id each input made in the demo
     foe_span = {"x": [None, None], "z": [None, None]}
 
     def note_foe_pos():
@@ -1825,7 +1828,16 @@ def main():
                         if k_n == 0 and time.perf_counter() - t_s > 0.4:
                             break
                         time.sleep(0.002)
-                    want = expect.get(tok)
+                    # The demo's own move id is the answer. The calibration
+                    # table holds the STANDALONE version of a token, and a
+                    # string or stance turns the same input into another move:
+                    # 6P out of the Shuffle is 8078, not the standing 177, and
+                    # comparing against the table called that wrong.
+                    mvs_t = cc_mv.get(text) or []
+                    want = mvs_t[n_st] if n_st < len(mvs_t) and mvs_t[n_st] else None
+                    from_demo = want is not None
+                    if want is None:
+                        want = expect.get(tok)
                     if again_t:
                         tok_show = f"{tok}(+{again_t})"
                     else:
@@ -1836,6 +1848,8 @@ def main():
                         mark = "(stance entry, no button)"
                     elif not got:
                         mark = "NOTHING CAME OUT"
+                    elif from_demo:
+                        mark = "ok" if want in got else f"WRONG - expected {want}"
                     elif chain:
                         # the same token again continues a chain, and every
                         # part has its own animation: 214T runs 8141 > 8156 >

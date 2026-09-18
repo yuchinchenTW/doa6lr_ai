@@ -17,7 +17,7 @@ evening of reverts:
 | `HK,P,P,P,P` | cleared | **5/5 at bb86dac** (with +2 re-press) |
 | `8K,S,6S,6S,6S` | cleared | 3rd input drops |
 | `3K,3K,66P` | cleared | **3/3**, dash travel at the game's ceiling |
-| `P,P,P,4,6P` | cleared | not tested |
+| `P,P,P,4,6P` | cleared | **5/5** (176>8045>8046>8118>8078) |
 | `9K,6P,6P,6P` | cleared (wall only) | not tested |
 | `66P,8P,P,P,4K,K,K,K` | cleared | not tested |
 
