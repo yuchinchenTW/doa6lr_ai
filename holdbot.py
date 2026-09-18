@@ -3183,8 +3183,16 @@ def main():
                     waiting_ok = (my_idle or in_stance or (my_type_now == MT_STRIKE
                                               and my_mv_tick == combo["last_mv"]
                                               and me.get("Phase") >= PH_RECOVERY))
+                    # the gap recorded for the input we are still waiting on,
+                    # and the delay --probe-step pinned for it if there is one
+                    dts_r = cc_dt.get(combo.get("recipe"))
+                    i_r = max(0, combo["i"] - 1)
+                    pin_r = (cc_pin.get(combo.get("recipe")) or {}).get(str(i_r))
+                    gap_r = dts_r[i_r] if dts_r and i_r < len(dts_r) else 0.0
+                    long_r = gap_r > 0.4 and pin_r is None
                     if combo.get("await_") and waiting_ok and (foe_open or nxt_is_throw) \
-                            and now - combo["t"] > 0.04 and d_c <= args.combo_range:
+                            and now - combo["t"] > 0.07 \
+                            and d_c <= args.combo_range:
                         # not taken yet: the buffer window is the tail of the
                         # recovery, so keep re-pressing every ~2 frames until
                         # our move id changes. Give up by TIME, not count: a
@@ -3192,7 +3200,8 @@ def main():
                         # and the juggle 6P was abandoned before we were even
                         # idle - 0.5 s after we are idle, or 1.2 s in all
                         t_first = combo.get("t_first") or combo["t"]
-                        if (now - t_first > 1.2) or (my_idle and now - t_first > 0.5):
+                        if (now - t_first > 1.2) or (my_idle and now - t_first > 0.5) \
+                                or combo.get("again", 0) >= (12 if long_r else 3):
                             combo_reset(f"{combo.get('tok', '?')} not accepted "
                                         f"({combo.get('again', 0) + 1}x, {now - t_first:.2f}s)")
                         else:
@@ -3218,15 +3227,25 @@ def main():
                     elif ready or (foe_open and my_idle and d_c <= args.combo_range
                                    and now - combo["t"] > 0.03):
                         do_press = True
-                        # the demo's own interval, where we recorded one: H+K
-                        # runs 0.72 s and its follow-up comes after that, so
-                        # pressing as soon as the move appears loses the input
+                        # The same three rules --test-combo was validated on,
+                        # in the same order:
+                        #   a delay pinned in combo_timing.json wins outright;
+                        #   a long gap waits for our own move to end, and no
+                        #     later than three quarters of it;
+                        #   a short gap goes at the recorded gap less 0.08 s.
                         dts = cc_dt.get(combo.get("recipe"))
-                        if dts and combo["i"] < len(dts):
-                            # half the demo's gap: the engine re-presses too,
-                            # and the buffer opens in the recovery
-                            need = dts[combo["i"]] * 0.5
-                            if need > 0.05 and now - combo["t"] < need:
+                        pin_c = (cc_pin.get(combo.get("recipe"))
+                                 or {}).get(str(combo["i"]))
+                        since_c = now - combo["t"]
+                        if pin_c is not None:
+                            if since_c < float(pin_c):
+                                do_press = False
+                        elif dts and combo["i"] < len(dts):
+                            gap_c = dts[combo["i"]]
+                            if gap_c > 0.4:
+                                if my_kind != 0 and since_c < gap_c * 0.75:
+                                    do_press = False
+                            elif since_c < max(0.04, gap_c - 0.08):
                                 do_press = False
                     elif (my_type_now in (MT_HIT, MT_THROWN, MT_HOLD_HIT, 7)
                           and not in_stance and now - combo["t"] > 0.1):
@@ -3239,9 +3258,12 @@ def main():
                         in_string[0] = False
                         combo["i"] += 1
                         combo["last_mv"] = my_mv_tick
-                        combo["t"] = now
+                        # combo_press stamps the instant the button went down.
+                        # Timing from "now", the loop tick before the press,
+                        # charges the following input the whole press.
+                        combo["t"] = btn_at[0] or now
                         if not repress:
-                            combo["t_first"] = now
+                            combo["t_first"] = combo["t"]
                         combo["await_"] = True
                         combo["tok"] = tok
                         if not repress:

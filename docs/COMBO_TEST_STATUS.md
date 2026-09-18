@@ -26,22 +26,18 @@ been signed off at six different commits over 22 hours, each on a different
 version of the same function, none re-checked after the code moved. Any change
 from here re-runs all eight.
 
-## The match engine does NOT use these timings
+## The match engine uses the same timings
 
-`--test-combo` and the match engine are separate code. The table above is the
-harness. The engine, as of `72d72af`, still has the older rules:
+`--test-combo` and the match engine are separate code, so the engine was
+given the harness rules one for one at `a591f69`+1: a delay pinned in
+`combo_timing.json` wins outright, a long gap waits for our own move to end
+and no later than three quarters of it, a short gap goes at the recorded gap
+less 0.08 s, every interval is measured from the instant the button went
+down, and a re-press goes every 0.07 s, three times on a short gap and
+twelve on a long one.
 
-| | harness (validated) | match engine |
-|---|---|---|
-| gap before a follow-up | recorded gap less 0.08 s, long gaps wait for the move to end | half the recorded gap, no long/short split |
-| measured from | the instant the button went down | the loop tick before the press |
-| re-press interval | 0.07 s from the end of the press | 0.04 s |
-| re-press limit | 3 on a short gap, 12 on a long one | none |
-| `combo_timing.json` | used | not read |
-
-So a combo fires in a match, but not with the timing that was just verified.
-The closing K of the Shuffle in particular has no pinned delay there, which is
-the input that took six rounds to get right in the harness.
+The `--test-combo` block was checked byte for byte before and after that
+change and is identical, so the eight rows above still stand.
 
 ## What the input code has to get right
 
