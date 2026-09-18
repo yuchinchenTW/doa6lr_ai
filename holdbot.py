@@ -1257,26 +1257,29 @@ def main():
             # forward for as long as the gap needs, never under the floor or
             # it stops being a dash (66P becomes a plain 6P, 177).
             # A dash needs a character who can WALK: pressed inside the
-            # previous move's animation the run-up never happens.
+            # previous move's animation nothing happens.
             t_free = time.perf_counter()
             while time.perf_counter() - t_free < 0.6:
                 me.refresh()
                 if me.get("MoveKind") == 0:
                     break
                 time.sleep(0.004)
-            # Then the recipe that actually produces it: ONE tap forward, a
-            # third of a second of nothing, and only then 6+P. Holding forward
-            # continuously - however long - gave a plain 6P (177) every time;
-            # the gap between the two is what the game reads as a dash.
-            # 0.6 s after the previous move ends, one tap forward; 0.6 s
-            # after that, 6+P. Every version that held forward continuously,
-            # or that put the two inputs closer together, produced a plain 6P
-            # (177) with no travel.
-            time.sleep(0.60)
+            # --probe-dash walked the whole space against Minato's 66P. Two
+            # things decide it, and both are the opposite of what holding the
+            # direction down does:
+            #   * the gap between the taps must be SHORT. 0.05 and 0.10 s gave
+            #     8077; 0.20 s and longer gave a plain 6P (177), as did
+            #     holding forward for 0.13, 0.20, 0.30 or 0.45 s.
+            #   * the button goes down WITH the direction, not after it.
+            # Two taps was the tolerant one - 8077 at 0.05, 0.10 and 0.20 s.
             inj.down(horiz)
             time.sleep(0.05)
             inj.up(horiz)
-            time.sleep(0.60)
+            time.sleep(0.10)
+            inj.down(horiz)
+            time.sleep(0.05)
+            inj.up(horiz)
+            time.sleep(0.02)
             inj.down(horiz)
             time.sleep(0.017)
             inj.down(vert + [btn])
