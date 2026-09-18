@@ -19,7 +19,7 @@ evening of reverts:
 | `3K,3K,66P` | cleared | **3/3**, dash travel at the game's ceiling |
 | `P,P,P,4,6P` | cleared | **5/5** (176>8045>8046>8118>8078) |
 | `9K,6P,6P,6P` | cleared (wall only) | **4/4** (189>177>8065>8066) |
-| `66P,8P,P,P,4K,K,K,K` | cleared | not tested |
+| `66P,8P,P,P,4K,K,K,K` | cleared | **8/8** (8077>190>176>8045>8053>8054>8055>8056) |
 
 ## What the input code has to get right
 
@@ -54,6 +54,15 @@ again, separately, in holdbot:
   branch and the halved timing plus re-presses is right.
 * a step the recording skipped (a walk) still took time that belongs to the
   next gap
+* a follow-up goes out at the recorded gap less 0.08 s, with up to three
+  retries. The retries matter as much as the timing: every fraction of the gap
+  tried (0.4, 0.5, gap-0.06) lost the closing K of the Shuffle the same way,
+  one press eaten and a single retry landing after the stance had moved on.
+  Twelve retries is too many - the spare presses buffer and eat the input after
+  them, which turned a 4K into the P string's third hit.
+* the window that watches for a move to appear is itself a floor on how fast
+  the next input can go out; 0.12 s there held the 4K back whatever the timing
+  rule said
 
 ## Rule for changing any of this
 
