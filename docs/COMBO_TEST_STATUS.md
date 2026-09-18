@@ -10,21 +10,33 @@ evening of reverts:
   input code. This is the one that predicts what happens in a fight, and it is
   a separate, younger implementation.
 
-| sequence | comboreplay | `--test-combo` |
-|---|---|---|
-| `236P` | cleared | not tested |
-| `214T,214T,214T,214T` | cleared | **4/4 at f0693be** |
-| `HK,P,P,P,P` | cleared | **5/5 at a4c2cc8**, no re-press needed |
-| `8K,S,6S,6S,6S` | cleared | 3rd input drops |
-| `3K,3K,66P` | cleared | **3/3**, dash travel at the game's ceiling |
-| `P,P,P,4,6P` | cleared | **5/5** (176>8045>8046>8118>8078) |
-| `9K,6P,6P,6P` | cleared (wall only) | **4/4** (189>177>8065>8066) |
-| `66P,8P,P,P,4K,K,K,K` | cleared | **8/8** (8077>190>176>8045>8053>8054>8055>8056) |
+| sequence | confirmed at | holdbot.py then | re-checked since? |
+|---|---|---|---|
+| `214T,214T,214T,214T` | 4/4 at `f0693be` 01:11 | `fba13f7e` | no - broken now |
+| `HK,P,P,P,P` | 5/5 at `bb86dac` 01:21 | `20a341c3` | no |
+| `3K,3K,66P` | 3/3 at `9d021d7` 23:00 | `db4eb7e0` | no |
+| `P,P,P,4,6P` | 5/5 at `f27bb9e` 23:04 | `42c45f88` | no |
+| `9K,6P,6P,6P` | 4/4 at `51e5045` 23:07 | `0e283809` | no (needs a wall) |
+| `66P,8P,P,P,4K,K,K,K` | 8/8 at `d579fc4` | `a78862c7` | 7/8 today |
+| `8K,S,6S,6S,6S` | never passed | - | 3rd input drops |
+| `236P` | never tested | - | - |
 
-Everything except `HK,P,P,P,P` passed BEFORE the commit that made every
-interval measure from the button rather than from the press routine
-returning. That moved every gap in by about 0.09 s, so those rows are stale
-until they are run again.
+Every one of those commits is an ancestor of `f7430ef`, in a single straight
+line with no branches. So each row was confirmed against a DIFFERENT build, and
+nothing was re-checked afterwards: `214T` was signed off 22 hours and six
+holdbot.py versions before `66P,8P,P,P,4K,K,K,K` was.
+
+**There is no commit at which all eight pass, and none can be constructed by
+picking commits.** They are six versions of one function, not six independent
+files. `d579fc4` and `f7430ef` share a blob, so the only row whose confirmation
+still stands on today's build is the eight-input one.
+
+The file today is `f7430ef`'s `holdbot.py` plus two changes that only execute
+for a throw token (`6ee0c4a`, `69b8727`); `MoveKind` is 2, 3 or 13 during a
+strike and never 4, 5 or 6, so no strike row can have moved.
+
+The way out is one build and one pass over every row, recording the result
+against a single commit. `--test-combo all` does that in one run.
 
 ## The harness is at f7430ef and nothing may be changed without a measurement
 
