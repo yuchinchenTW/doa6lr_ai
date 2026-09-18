@@ -10,58 +10,38 @@ evening of reverts:
   input code. This is the one that predicts what happens in a fight, and it is
   a separate, younger implementation.
 
-| sequence | confirmed at | holdbot.py then | re-checked since? |
-|---|---|---|---|
-| `214T,214T,214T,214T` | 4/4 at `f0693be` 01:11 | `fba13f7e` | no - broken now |
-| `HK,P,P,P,P` | 5/5 at `bb86dac` 01:21 | `20a341c3` | no |
-| `3K,3K,66P` | 3/3 at `9d021d7` 23:00 | `db4eb7e0` | no |
-| `P,P,P,4,6P` | 5/5 at `f27bb9e` 23:04 | `42c45f88` | no |
-| `9K,6P,6P,6P` | 4/4 at `51e5045` 23:07 | `0e283809` | no (needs a wall) |
-| `66P,8P,P,P,4K,K,K,K` | 8/8 at `d579fc4` | `a78862c7` | 7/8 today |
-| `8K,S,6S,6S,6S` | never passed | - | 3rd input drops |
-| `236P` | never tested | - | - |
+| sequence | `--test-combo` at `72d72af` |
+|---|---|
+| `214T,214T,214T,214T` | pass |
+| `HK,P,P,P,P` | pass |
+| `8K,S,6S,6S,6S` | pass |
+| `3K,3K,66P` | pass |
+| `P,P,P,4,6P` | pass |
+| `9K,6P,6P,6P` | pass |
+| `66P,8P,P,P,4K,K,K,K` | pass |
+| `236P` | pass |
 
-Every one of those commits is an ancestor of `f7430ef`, in a single straight
-line with no branches. So each row was confirmed against a DIFFERENT build, and
-nothing was re-checked afterwards: `214T` was signed off 22 hours and six
-holdbot.py versions before `66P,8P,P,P,4K,K,K,K` was.
+All eight confirmed against ONE build for the first time. Before this they had
+been signed off at six different commits over 22 hours, each on a different
+version of the same function, none re-checked after the code moved. Any change
+from here re-runs all eight.
 
-**There is no commit at which all eight pass, and none can be constructed by
-picking commits.** They are six versions of one function, not six independent
-files. `d579fc4` and `f7430ef` share a blob, so the only row whose confirmation
-still stands on today's build is the eight-input one.
+## The match engine does NOT use these timings
 
-The file today is `f7430ef`'s `holdbot.py` plus two changes that only execute
-for a throw token (`6ee0c4a`, `69b8727`); `MoveKind` is 2, 3 or 13 during a
-strike and never 4, 5 or 6, so no strike row can have moved.
+`--test-combo` and the match engine are separate code. The table above is the
+harness. The engine, as of `72d72af`, still has the older rules:
 
-The way out is one build and one pass over every row, recording the result
-against a single commit. `--test-combo all` does that in one run.
+| | harness (validated) | match engine |
+|---|---|---|
+| gap before a follow-up | recorded gap less 0.08 s, long gaps wait for the move to end | half the recorded gap, no long/short split |
+| measured from | the instant the button went down | the loop tick before the press |
+| re-press interval | 0.07 s from the end of the press | 0.04 s |
+| re-press limit | 3 on a short gap, 12 on a long one | none |
+| `combo_timing.json` | used | not read |
 
-## The harness is at f7430ef and nothing may be changed without a measurement
-
-`holdbot.py` was restored wholesale to f7430ef, the commit where
-`66P,8P,P,P,4K,K,K,K` ran 8/8. Everything a day of edits added to the test
-harness went with it, including `--probe-step` and the timing report.
-
-The rules listed below describe THAT commit. Several of the bullets were
-rewritten during those edits to describe rules the code no longer has; where a
-bullet cites a measurement, the measurement is real and worth keeping, but the
-rule it justified is not in the code.
-
-What the sweep actually established, and what is still unexplained:
-
-* the closing K of the Shuffle takes a press at 0.04 s and ignores every delay
-  from 0.06 s upward. At 0.04 s the move still arrived 0.232 s later against
-  the demo's 0.234 s, so the input buffers
-* making that the rule for every short gap broke the string from its fifth
-  input on, so the flat early press is wrong for the other tokens even though
-  it is right for this one
-* timing the gap from when the previous move appeared, rather than from the
-  button, broke it worse still
-
-So the closing K is a real defect in the f7430ef harness, it is understood, and
-no fix for it has been found that leaves the other seven inputs alone.
+So a combo fires in a match, but not with the timing that was just verified.
+The closing K of the Shuffle in particular has no pinned delay there, which is
+the input that took six rounds to get right in the harness.
 
 ## What the input code has to get right
 
