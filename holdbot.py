@@ -1251,33 +1251,24 @@ def main():
             # carries the move, and the run-up is its whole reach. Hold
             # forward for as long as the gap needs, never under the floor or
             # it stops being a dash (66P becomes a plain 6P, 177).
-            # A dash needs a character who can WALK. Pressed inside the
-            # previous move's animation the run-up simply does not happen and
-            # only the last 6+P survives, which is a plain 6P (177). The demo
-            # waits for the move to end before it runs.
+            # A dash needs a character who can WALK: pressed inside the
+            # previous move's animation the run-up never happens.
             t_free = time.perf_counter()
             while time.perf_counter() - t_free < 0.6:
                 me.refresh()
                 if me.get("MoveKind") == 0:
                     break
                 time.sleep(0.004)
-            d_dash, _ = distance()
+            # Then the recipe that actually produces it: ONE tap forward, a
+            # third of a second of nothing, and only then 6+P. Holding forward
+            # continuously - however long - gave a plain 6P (177) every time;
+            # the gap between the two is what the game reads as a dash.
             inj.down(horiz)
-            # Wait until she is actually MOVING before the button. comboreplay
-            # lands this because close_in leaves forward held and she is
-            # already walking when the press goes out; from a standstill
-            # 0.13 s is enough for the game to see the direction but not for a
-            # run to start, and 66P comes out as a plain 6P (177).
-            t_run = time.perf_counter()
-            while time.perf_counter() - t_run < 0.45:
-                me.refresh()
-                if me.get("CurrentMove") in FWD_IDS:
-                    break
-                time.sleep(0.004)
-            run_min = 0.13 if not d_dash else max(0.13, min(0.35, d_dash / 1100.0))
-            left_run = run_min - (time.perf_counter() - t_run)
-            if left_run > 0:
-                time.sleep(left_run)
+            time.sleep(0.05)
+            inj.up(horiz)
+            time.sleep(0.30)
+            inj.down(horiz)
+            time.sleep(0.017)
             inj.down(vert + [btn])
         elif horiz and vert and dy < 0:
             # A DOWN diagonal needs both directions in place before the
