@@ -5,3 +5,4 @@ hunt_*.json
 scan_result.json
 pointer_paths.json
 *.log
+combo_stats.json.bak
