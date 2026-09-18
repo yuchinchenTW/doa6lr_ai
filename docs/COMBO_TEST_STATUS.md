@@ -64,6 +64,20 @@ again, separately, in holdbot:
   the next input can go out; 0.12 s there held the 4K back whatever the timing
   rule said
 
+## The match engine uses the same numbers
+
+As of the commit that added this section, `holdbot.py` presses a combo with the
+rules above rather than its own. It had been waiting half of every recorded gap
+and re-pressing without a limit, so a string that passed `--test-combo` still
+fell apart in a fight. The three places that now match:
+
+* the gap gate: over 0.4 s, wait for our own `MoveKind` to return to 0, capped
+  at three quarters of the gap; under it, the gap less 0.08 s
+* the re-press interval: 0.07 s, up from 0.04
+* the re-press cap: twelve on a long gap, three on a short one. The cap sits in
+  the give-up test, not in the condition, so a string that is never accepted
+  still resets on its 1.2 s timeout
+
 ## Rule for changing any of this
 
 Change one thing, then re-test **every** row that already says it passed. The

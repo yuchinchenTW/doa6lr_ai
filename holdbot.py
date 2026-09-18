@@ -3127,15 +3127,22 @@ def main():
                                               and my_mv_tick == combo["last_mv"]
                                               and me.get("Phase") >= PH_RECOVERY))
                     if combo.get("await_") and waiting_ok and (foe_open or nxt_is_throw) \
-                            and now - combo["t"] > 0.07 and d_c <= args.combo_range                             and combo.get("again", 0) < 3:
+                            and now - combo["t"] > 0.07 and d_c <= args.combo_range:
                         # not taken yet: the buffer window is the tail of the
                         # recovery, so keep re-pressing every ~2 frames until
-                        # our move id changes. Give up by TIME, not count: a
-                        # launcher's recovery (8K, 8144) outlasted 6 presses
+                        # our move id changes. Give up by TIME and by COUNT:
+                        # a launcher's recovery (8K, 8144) outlasted 6 presses
                         # and the juggle 6P was abandoned before we were even
-                        # idle - 0.5 s after we are idle, or 1.2 s in all
+                        # idle, so a long gap gets twelve tries - but on a
+                        # short one a fourth press buffers and eats the input
+                        # after it, which turned 4K into the P string's third
+                        # hit. 0.5 s after we are idle, or 1.2 s in all.
                         t_first = combo.get("t_first") or combo["t"]
-                        if (now - t_first > 1.2) or (my_idle and now - t_first > 0.5):
+                        dts_r = cc_dt.get(combo.get("recipe"))
+                        i_r = max(0, combo["i"] - 1)
+                        gap_r = dts_r[i_r] if dts_r and i_r < len(dts_r) else 0.0
+                        if (now - t_first > 1.2) or (my_idle and now - t_first > 0.5) \
+                                or combo.get("again", 0) >= (12 if gap_r > 0.4 else 3):
                             combo_reset(f"{combo.get('tok', '?')} not accepted "
                                         f"({combo.get('again', 0) + 1}x, {now - t_first:.2f}s)")
                         else:
