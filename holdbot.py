@@ -1834,7 +1834,10 @@ def main():
                         # active frames is simply eaten, and one press per
                         # token left the second P of HK,PPPP missing every run
                         # while the replay's "+1 re-press" landed it.
-                        elif (not got and again_t < (12 if gap_long[0] else 1)
+                        # ...and none at all on a short gap: the single spare
+                        # press of the last K landed after the Shuffle had
+                        # ended and came out as a standing kick (179)
+                        elif (not got and again_t < (12 if gap_long[0] else 0)
                               and me.get("MoveKind") not in (4, 5, 6)
                               and time.perf_counter() - t_ag > 0.07):
                             combo_press(st)
