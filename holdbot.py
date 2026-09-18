@@ -1778,10 +1778,26 @@ def main():
                         # waits for the previous move to finish, but the buffer
                         # opens in its RECOVERY - sleeping the whole 0.735 s
                         # after H+K put the P visibly late.
-                        need_t = (dts_t[n_st] * 0.5) if n_st < len(dts_t) else 0.1
-                        left_t = max(0.04, need_t) - (time.perf_counter() - t_step)
-                        if left_t > 0:
-                            time.sleep(left_t)
+                        gap_t = dts_t[n_st] if n_st < len(dts_t) else 0.2
+                        if gap_t > 0.4:
+                            # A long gap means the demo waited for the previous
+                            # move to END. Pressing at half of it lands inside
+                            # the animation and the game gives the STRING
+                            # continuation instead: 9K's follow-up 6P came out
+                            # as 8084 rather than the standing 177, and the
+                            # rest of the combo went with it.
+                            t_g = time.perf_counter()
+                            while time.perf_counter() - t_g < gap_t + 0.25:
+                                me.refresh()
+                                if me.get("MoveKind") == 0:
+                                    break
+                                time.sleep(0.004)
+                        else:
+                            # a string branch: the demo's own timing, halved so
+                            # the re-presses can find the buffer
+                            left_t = max(0.04, gap_t * 0.5) - (time.perf_counter() - t_step)
+                            if left_t > 0:
+                                time.sleep(left_t)
                     before = me.get("CurrentMove")
                     if n_st and me.get("MoveKind") in (4, 5, 6):
                         # a throw or hold is playing: its window is at the END
