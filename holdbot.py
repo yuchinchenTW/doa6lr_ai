@@ -1247,8 +1247,13 @@ def main():
             # Tapping forward and pressing 17 ms later produced the right move
             # a step from where it started (the Combo Challenge's 66P fell
             # short of the post until the run-up was held for ~0.14 s).
+            # 0.13 s only registers the dash COMMAND; the running is what
+            # carries the move, and the run-up is its whole reach. Hold
+            # forward for as long as the gap needs, never under the floor or
+            # it stops being a dash (66P becomes a plain 6P, 177).
+            d_dash, _ = distance()
             inj.down(horiz)
-            time.sleep(0.13)
+            time.sleep(0.13 if not d_dash else max(0.13, min(0.35, d_dash / 1100.0)))
             inj.down(vert + [btn])
         elif horiz and vert and dy < 0:
             # A DOWN diagonal needs both directions in place before the
