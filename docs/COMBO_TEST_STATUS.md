@@ -18,7 +18,7 @@ evening of reverts:
 | `8K,S,6S,6S,6S` | cleared | 3rd input drops |
 | `3K,3K,66P` | cleared | **3/3**, dash travel at the game's ceiling |
 | `P,P,P,4,6P` | cleared | **5/5** (176>8045>8046>8118>8078) |
-| `9K,6P,6P,6P` | cleared (wall only) | not tested |
+| `9K,6P,6P,6P` | cleared (wall only) | **4/4** (189>177>8065>8066) |
 | `66P,8P,P,P,4K,K,K,K` | cleared | not tested |
 
 ## What the input code has to get right
@@ -47,8 +47,13 @@ again, separately, in holdbot:
 * a direction inside a string needs ~50 ms of lead, not 17
 * a throw chain's window is at the END of each part, so press until the
   animation moves on rather than waiting a fixed time
-* the demo's own interval is the floor for an ordinary follow-up, and a step
-  the recording skipped (a walk) still took time that belongs to the next gap
+* a recorded gap over 0.4 s means the demo waited for the previous move to
+  END: pressing at half of it lands inside the animation and the game answers
+  with the STRING continuation instead of the move wanted (9K's follow-up 6P
+  came out as 8084 rather than the standing 177). Under 0.4 s it is a string
+  branch and the halved timing plus re-presses is right.
+* a step the recording skipped (a walk) still took time that belongs to the
+  next gap
 
 ## Rule for changing any of this
 
