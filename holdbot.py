@@ -1272,16 +1272,16 @@ def main():
             #     holding forward for 0.13, 0.20, 0.30 or 0.45 s.
             #   * the button goes down WITH the direction, not after it.
             # Two taps was the tolerant one - 8077 at 0.05, 0.10 and 0.20 s.
+            # The second tap is HELD before the button: "tap, 0.10 s,
+            # tap-hold 0.15 s + punch" also gave 8077 and she runs for that
+            # 0.15 s, which is the travel. Releasing straight away produced
+            # the move on the spot.
             inj.down(horiz)
             time.sleep(0.05)
             inj.up(horiz)
             time.sleep(0.10)
             inj.down(horiz)
-            time.sleep(0.05)
-            inj.up(horiz)
-            time.sleep(0.02)
-            inj.down(horiz)
-            time.sleep(0.017)
+            time.sleep(0.15)
             inj.down(vert + [btn])
         elif horiz and vert and dy < 0:
             # A DOWN diagonal needs both directions in place before the
@@ -1664,8 +1664,11 @@ def main():
                 yield (f"tap, {gap:.2f}s, tap, dir+{btn_d}",
                        [("tap", 0.05), ("wait", gap), ("tap", 0.05),
                         ("wait", 0.02), ("dirbtn", 0)])
-                yield (f"tap, {gap:.2f}s, tap-hold 0.15s +{btn_d}",
-                       [("tap", 0.05), ("wait", gap), ("down", 0.15), ("btn", 0)])
+            # how long the second tap may be HELD: that hold is the run, and
+            # the run is the travel
+            for hold_d in (0.15, 0.25, 0.35, 0.50, 0.70):
+                yield (f"tap, 0.10s, tap-hold {hold_d:.2f}s +{btn_d}",
+                       [("tap", 0.05), ("wait", 0.10), ("down", hold_d), ("btn", 0)])
 
         print(f"probe-dash {tok_d}: standing in Training, one recipe at a time. "
               f"Ctrl-C to stop.\n")
