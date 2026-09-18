@@ -1223,7 +1223,7 @@ def main():
                   + "; ".join(f"{k}: {combo_table[k]}" for k in combo_seqs))
     combo = {"i": 0, "last_mv": None, "t": 0.0, "hp0": None, "hits": 0,
              "seq": [], "opener": None}
-    combo_stats = {"started": 0, "hits": 0, "dmg": 0, "by_len": {}}
+    combo_stats = {"started": 0, "hits": 0, "dmg": 0, "by_len": {}, "why": {}}
 
     def step_reach(step):
         """How far this follow-up still connects. A plain P is the short one
@@ -1355,6 +1355,30 @@ def main():
         return tok
 
     def combo_reset(why):
+        # Why a string stopped, bucketed. A match run showed 161 of 225 combos
+        # ending after a single follow-up and there was no way to tell whether
+        # the input was refused, the opponent recovered, or the string simply
+        # had nothing left. Guessing at that is what this whole exercise has
+        # been trying to stop.
+        if why.startswith("string done"):
+            key_w = "string finished"
+        elif "not accepted" in why:
+            key_w = "input never came out"
+        elif why.startswith("they recovered"):
+            key_w = "they recovered"
+        elif why.startswith("foe kind"):
+            key_w = "foe left hit stun (" + why.split()[-1] + ")"
+        elif "out of reach" in why:
+            key_w = "out of reach"
+        elif why.startswith("we are type"):
+            key_w = "we got hit or thrown"
+        else:
+            key_w = why.split("(")[0].strip()
+        rec_w = combo.get("recipe") or "?"
+        row_w = combo_stats["why"].setdefault(key_w, [0, 0, {}])
+        row_w[0] += 1
+        row_w[1] += combo.get("i", 0)
+        row_w[2][rec_w] = row_w[2].get(rec_w, 0) + 1
         if combo["hp0"] is not None:
             dealt = max(0, combo["hp0"] - foe.get("CurrentHealth"))
             if dealt > 300:
@@ -4256,6 +4280,14 @@ def main():
                       f"({combo_stats['dmg'] / n:.0f} per combo)  [--combo {args.combo}]")
                 for ln, (c, dmg) in sorted(combo_stats["by_len"].items()):
                     print(f"    {ln} extra input(s): {c}x, {dmg / max(c, 1):.0f} dmg avg")
+                if combo_stats["why"]:
+                    print("    why the string stopped (times, mean inputs made, "
+                          "worst string):")
+                    for k_w, (c_w, i_w, by_w) in sorted(
+                            combo_stats["why"].items(), key=lambda kv: -kv[1][0]):
+                        top_w = max(by_w.items(), key=lambda kv: kv[1])
+                        print(f"      {k_w:<28} {c_w:>4}x  {i_w / max(c_w, 1):>4.1f}  "
+                              f"{top_w[0]} x{top_w[1]}")
             if escape["tries"]:
                 print(f"  throw escapes: break input pressed on {escape['tries']} grabs, "
                       f"{escape['ok']} parts cost no damage")
