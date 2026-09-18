@@ -1263,15 +1263,15 @@ def main():
             # third of a second of nothing, and only then 6+P. Holding forward
             # continuously - however long - gave a plain 6P (177) every time;
             # the gap between the two is what the game reads as a dash.
-            # 0.2 s after the previous move ends, one tap forward; 0.4 s
+            # 0.6 s after the previous move ends, one tap forward; 0.6 s
             # after that, 6+P. Every version that held forward continuously,
             # or that put the two inputs closer together, produced a plain 6P
             # (177) with no travel.
-            time.sleep(0.20)
+            time.sleep(0.60)
             inj.down(horiz)
             time.sleep(0.05)
             inj.up(horiz)
-            time.sleep(0.40)
+            time.sleep(0.60)
             inj.down(horiz)
             time.sleep(0.017)
             inj.down(vert + [btn])
