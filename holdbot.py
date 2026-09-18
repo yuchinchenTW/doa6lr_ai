@@ -3127,7 +3127,7 @@ def main():
                                               and my_mv_tick == combo["last_mv"]
                                               and me.get("Phase") >= PH_RECOVERY))
                     if combo.get("await_") and waiting_ok and (foe_open or nxt_is_throw) \
-                            and now - combo["t"] > 0.04 and d_c <= args.combo_range:
+                            and now - combo["t"] > 0.07 and d_c <= args.combo_range                             and combo.get("again", 0) < 3:
                         # not taken yet: the buffer window is the tail of the
                         # recovery, so keep re-pressing every ~2 frames until
                         # our move id changes. Give up by TIME, not count: a
@@ -3161,15 +3161,26 @@ def main():
                     elif ready or (foe_open and my_idle and d_c <= args.combo_range
                                    and now - combo["t"] > 0.03):
                         do_press = True
-                        # the demo's own interval, where we recorded one: H+K
-                        # runs 0.72 s and its follow-up comes after that, so
-                        # pressing as soon as the move appears loses the input
+                        # The timings --test-combo settled on against Minato's
+                        # eight-input Combo Challenge string:
+                        #   long gap (the demo waited for the previous move to
+                        #     END): wait for our own move to finish, but no
+                        #     later than three quarters of the gap - a juggle
+                        #     follow-up buffers during the recovery, and the
+                        #     demo's own timing is visibly late;
+                        #   short gap (a string branch): the gap less 0.08 s.
+                        # Pressing at half of a LONG gap lands inside the
+                        # animation and the game answers with the previous
+                        # move's string continuation instead: 9K's follow-up 6P
+                        # came out as 8084 rather than the standing 177.
                         dts = cc_dt.get(combo.get("recipe"))
                         if dts and combo["i"] < len(dts):
-                            # half the demo's gap: the engine re-presses too,
-                            # and the buffer opens in the recovery
-                            need = dts[combo["i"]] * 0.5
-                            if need > 0.05 and now - combo["t"] < need:
+                            gap_c = dts[combo["i"]]
+                            since_c = now - combo["t"]
+                            if gap_c > 0.4:
+                                if my_kind != 0 and since_c < gap_c * 0.75:
+                                    do_press = False
+                            elif since_c < max(0.04, gap_c - 0.08):
                                 do_press = False
                     elif (my_type_now in (MT_HIT, MT_THROWN, MT_HOLD_HIT, 7)
                           and not in_stance and now - combo["t"] > 0.1):
