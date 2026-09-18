@@ -2058,20 +2058,6 @@ def main():
                         mark = "ok"
                     else:
                         mark = f"WRONG - expected {want}"
-                    # The gap is measured from when the previous move
-                    # APPEARED, never from the button that asked for it. The
-                    # two are not the same distance apart for every move, and
-                    # on the Shuffle the difference was the whole bug: the K
-                    # that makes 8055 is pressed 0.044 s after the previous
-                    # button but 8055 does not show up until 0.157 s later, so
-                    # timing the next K from the button pressed it BEFORE 8055
-                    # existed. All three presses were eaten and the stance had
-                    # ended by the time one landed, giving a standing kick,
-                    # 179 instead of 8056.
-                    # comboreplay, which clears this stage, has the same rule:
-                    # it will not press until the previous step's move id is
-                    # actually on screen.
-                    t_step = t_app or t_step
                     if t_app and prev_app and n_st < len(dts_t):
                         when = (f"  {t_app - prev_app:.3f}s "
                                 f"(demo {dts_t[n_st]:.3f})")
