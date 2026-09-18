@@ -1263,7 +1263,21 @@ def main():
                 time.sleep(0.004)
             d_dash, _ = distance()
             inj.down(horiz)
-            time.sleep(0.13 if not d_dash else max(0.13, min(0.35, d_dash / 1100.0)))
+            # Wait until she is actually MOVING before the button. comboreplay
+            # lands this because close_in leaves forward held and she is
+            # already walking when the press goes out; from a standstill
+            # 0.13 s is enough for the game to see the direction but not for a
+            # run to start, and 66P comes out as a plain 6P (177).
+            t_run = time.perf_counter()
+            while time.perf_counter() - t_run < 0.45:
+                me.refresh()
+                if me.get("CurrentMove") in FWD_IDS:
+                    break
+                time.sleep(0.004)
+            run_min = 0.13 if not d_dash else max(0.13, min(0.35, d_dash / 1100.0))
+            left_run = run_min - (time.perf_counter() - t_run)
+            if left_run > 0:
+                time.sleep(left_run)
             inj.down(vert + [btn])
         elif horiz and vert and dy < 0:
             # A DOWN diagonal needs both directions in place before the
