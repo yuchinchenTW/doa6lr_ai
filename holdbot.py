@@ -518,6 +518,12 @@ def main():
                     help="walk to this distance before each --test-combo run. "
                          "Off by default: 66P and 8P reach on their own, and "
                          "walking in first changed how the string played out.")
+    ap.add_argument("--test-gap", type=float, default=0.75, metavar="SCALE",
+                    help="fraction of the demo's recorded gap to wait before a "
+                         "follow-up that comes after a long pause (default "
+                         "0.75). Lower is faster; too low and the game answers "
+                         "with the previous move's string continuation instead "
+                         "of the move wanted, which shows up as a WRONG line.")
     ap.add_argument("--test-repeat", type=int, default=1,
                     help="how many times to run each string in --test-combo")
     ap.add_argument("--dry-run", action="store_true")
@@ -1824,7 +1830,7 @@ def main():
                             # the input lag. Waiting for neutral with slack on
                             # top put the P after 66P,8P visibly late.
                             t_g = time.perf_counter()
-                            while time.perf_counter() - t_g < gap_t - 0.05:
+                            while time.perf_counter() - t_g < gap_t * args.test_gap:
                                 me.refresh()
                                 if me.get("MoveKind") == 0:
                                     break
