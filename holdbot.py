@@ -1928,7 +1928,7 @@ def main():
                         combo_press(st)
                     t_step = btn_at[0]
                     got, t_s = [], time.perf_counter()
-                    again_t, t_ag = 0, btn_at[0]
+                    again_t, t_ag = 0, time.perf_counter()
                     while time.perf_counter() - t_s < 0.9:
                         me.refresh()
                         mv_n, k_n = me.get("CurrentMove"), me.get("MoveKind")
@@ -1943,17 +1943,21 @@ def main():
                         # one on a short gap: none at all lost the fourth
                         # input of 66P,8P,P,P,4K... entirely, and more than one
                         # buffers a spare press that eats the input after it
-                        # ...and close together on a short gap. At 0.07 s
-                        # the second P of HK,P,P,P,P needed two retries and so
-                        # went out at 0.28 s, where the demo has it at 0.218:
-                        # the spacing, not the first press, was the floor.
+                        # The cadence is 0.07 s measured from the END of
+                        # the press, which is 0.115 s apart in practice, and it
+                        # is not a knob. Tightening it to 0.045 and timing it
+                        # from the button put four presses inside the long gap
+                        # of 66P,8P,P,P,4K...: the spares buffered and surfaced
+                        # as the P string's third hit where the 4K belonged
+                        # (8046 instead of 8053), exactly the way twelve
+                        # retries had. The first press of a token times from
+                        # the button; the retries after it do not.
                         elif (not got and again_t < (12 if gap_long[0] else 3)
                               and me.get("MoveKind") not in (4, 5, 6)
-                              and time.perf_counter() - t_ag
-                              > (0.07 if gap_long[0] else 0.045)):
+                              and time.perf_counter() - t_ag > 0.07):
                             combo_press(st)
                             again_t += 1
-                            t_ag = btn_at[0]
+                            t_ag = time.perf_counter()
                         # press the next token as soon as this one is out, the
                         # way the engine does. Waiting for neutral put the
                         # second part of a four-part throw 0.9 s late, where
@@ -3227,7 +3231,7 @@ def main():
                     gap_r = dts_r[i_r] if dts_r and i_r < len(dts_r) else 0.0
                     long_r = gap_r > 0.4
                     if combo.get("await_") and waiting_ok and (foe_open or nxt_is_throw) \
-                            and now - combo["t"] > (0.07 if long_r else 0.045) \
+                            and now - combo["t"] > 0.07 \
                             and d_c <= args.combo_range:
                         # not taken yet: the buffer window is the tail of the
                         # recovery, so keep re-pressing every ~2 frames until
