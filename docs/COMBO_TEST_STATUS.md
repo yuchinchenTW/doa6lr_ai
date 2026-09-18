@@ -51,7 +51,12 @@ again, separately, in holdbot:
 * the button is held 45 ms; 20 ms is missed inside a string
 * a direction inside a string needs ~50 ms of lead, not 17
 * a throw chain's window is at the END of each part, so press until the
-  animation moves on rather than waiting a fixed time
+  animation moves on rather than waiting a fixed time. The recorded gap must
+  NOT be slept in front of a part while `MoveKind` is 4, 5 or 6: that sleep
+  misses the window and the rest of the chain comes out as throws from neutral
+  (182 and 8138 instead of 8158 and 8160). This guard has now been lost to a
+  revert twice. It is one condition, `if n_st and me.get("MoveKind") not in
+  (4, 5, 6)`, and `214T,214T,214T,214T` is the row that catches it
 * a recorded gap over 0.4 s means the demo waited for the previous move to
   END: pressing at half of it lands inside the animation and the game answers
   with the STRING continuation instead of the move wanted (9K's follow-up 6P

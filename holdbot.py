@@ -1780,7 +1780,13 @@ def main():
                 prev_tok = None
                 for n_st, st in enumerate(steps):
                     tok = st[2]
-                    if n_st:
+                    if n_st and me.get("MoveKind") not in (4, 5, 6):
+                        # ...but not while a throw or hold is playing: that
+                        # chain finds its own window by re-pressing below, and
+                        # sleeping the recorded gap in front of each part
+                        # missed it entirely (the 214T chain dropped after its
+                        # second grab and the rest came out as throws from
+                        # neutral: 182 and 8138 instead of 8158 and 8160).
                         # The demo's own gap is the whole rule. Our side's
                         # Phase field is not reliable, so waiting for RECOVERY
                         # fell through to "MoveKind 0" - the end of the whole
