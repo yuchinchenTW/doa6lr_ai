@@ -1800,7 +1800,9 @@ def main():
                             # but every spare press is buffered: the two extra
                             # P's of 66P,8P,P,P,4K... surfaced later as the
                             # string's third hit (8046) and ate the 4K.
-                            left_t = max(0.04, gap_t - 0.03) - (time.perf_counter() - t_step)
+                            # a little ahead of the demo, so the one allowed
+                            # re-press still falls inside the string's window
+                            left_t = max(0.04, gap_t - 0.06) - (time.perf_counter() - t_step)
                             if left_t > 0:
                                 time.sleep(left_t)
                     before = me.get("CurrentMove")
@@ -1834,10 +1836,10 @@ def main():
                         # active frames is simply eaten, and one press per
                         # token left the second P of HK,PPPP missing every run
                         # while the replay's "+1 re-press" landed it.
-                        # ...and none at all on a short gap: the single spare
-                        # press of the last K landed after the Shuffle had
-                        # ended and came out as a standing kick (179)
-                        elif (not got and again_t < (12 if gap_long[0] else 0)
+                        # one on a short gap: none at all lost the fourth
+                        # input of 66P,8P,P,P,4K... entirely, and more than one
+                        # buffers a spare press that eats the input after it
+                        elif (not got and again_t < (12 if gap_long[0] else 1)
                               and me.get("MoveKind") not in (4, 5, 6)
                               and time.perf_counter() - t_ag > 0.07):
                             combo_press(st)
