@@ -1760,6 +1760,7 @@ def main():
                         break
                     time.sleep(0.005)
                 time.sleep(0.25)
+                gap_long = [True]
                 steps = parse_combo(text)
                 dts_t = cc_dt.get(text) or []
                 print(f"  {text}" + (f"  (run {run_n + 1})" if args.test_repeat > 1 else ""))
@@ -1779,7 +1780,8 @@ def main():
                         # opens in its RECOVERY - sleeping the whole 0.735 s
                         # after H+K put the P visibly late.
                         gap_t = dts_t[n_st] if n_st < len(dts_t) else 0.2
-                        if gap_t > 0.4:
+                        gap_long[0] = gap_t > 0.4
+                        if gap_long[0]:
                             # A long gap means the demo waited for the previous
                             # move to END. Pressing at half of it lands inside
                             # the animation and the game gives the STRING
@@ -1793,9 +1795,12 @@ def main():
                                     break
                                 time.sleep(0.004)
                         else:
-                            # a string branch: the demo's own timing, halved so
-                            # the re-presses can find the buffer
-                            left_t = max(0.04, gap_t * 0.5) - (time.perf_counter() - t_step)
+                            # A string branch goes out on the demo's OWN
+                            # timing. Halving it and re-pressing looked faster,
+                            # but every spare press is buffered: the two extra
+                            # P's of 66P,8P,P,P,4K... surfaced later as the
+                            # string's third hit (8046) and ate the 4K.
+                            left_t = max(0.04, gap_t - 0.03) - (time.perf_counter() - t_step)
                             if left_t > 0:
                                 time.sleep(left_t)
                     before = me.get("CurrentMove")
@@ -1829,7 +1834,7 @@ def main():
                         # active frames is simply eaten, and one press per
                         # token left the second P of HK,PPPP missing every run
                         # while the replay's "+1 re-press" landed it.
-                        elif (not got and again_t < 12
+                        elif (not got and again_t < (12 if gap_long[0] else 1)
                               and me.get("MoveKind") not in (4, 5, 6)
                               and time.perf_counter() - t_ag > 0.07):
                             combo_press(st)
