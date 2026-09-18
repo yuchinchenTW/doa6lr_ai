@@ -1238,6 +1238,12 @@ def main():
         return r
 
     in_string = [False]            # a follow-up, not the first input
+    # The instant the BUTTON went down. combo_press returns 0.045 s later (it
+    # holds the button that long) and a dash returns almost a second later, so
+    # timing the next token from the call's RETURN charges it the hold as well.
+    # That is what made the second P of HK,P,P,P,P go out at 0.183 s instead of
+    # 0.138 s, miss, and need two re-presses to land at 0.36 s.
+    btn_at = [0.0]
 
     def combo_press(step):
         (dx, dy), btn, tok, motion = (step + ([],))[:4]
@@ -1250,6 +1256,9 @@ def main():
                 time.sleep(0.18)
                 inj.up(names_s)
                 dir_touched[0] = time.perf_counter()
+                # no button here, so the next token times from the end of this
+                # one exactly as it did before btn_at existed
+                btn_at[0] = dir_touched[0]
             return tok
         dash = bool(motion) and motion[-1] == ((dx, dy))
         for mdx, mdy in motion:                      # 236P: tap 2, tap 3, then 6+P
@@ -1298,6 +1307,7 @@ def main():
             time.sleep(0.10)
             inj.down(horiz)
             time.sleep(0.15)
+            btn_at[0] = time.perf_counter()
             inj.down(vert + [btn])
         elif horiz and vert and dy < 0:
             # A DOWN diagonal needs both directions in place before the
@@ -1306,6 +1316,7 @@ def main():
             # diagonals (9P, 9K) were fine.
             inj.down(horiz + vert)
             time.sleep(0.05)
+            btn_at[0] = time.perf_counter()
             inj.down([btn])
         else:
             if horiz:
@@ -1315,6 +1326,7 @@ def main():
                 time.sleep(0.05 if in_string[0] else 0.017)
             # the vertical goes down WITH the button (down alone a frame ahead
             # is a sidestep: 2T came out as id 32)
+            btn_at[0] = time.perf_counter()
             inj.down(vert + [btn])
         # A string follow-up needs a longer press than a single move does.
         # holdbot held a button for --press (0.020 s, 1.2 frames at 60 fps) and
@@ -1852,7 +1864,10 @@ def main():
                             time.sleep(0.004)
                     else:
                         combo_press(st)
-                    t_step = time.perf_counter()
+                    # A throw part keeps the old baseline: its chain is
+                    # driven by re-pressing, not by this gap, and f0693be ran
+                    # it 4/4 that way.
+                    t_step = time.perf_counter() if was_throw else btn_at[0]
                     got, t_s = [], time.perf_counter()
                     again_t, t_ag = 0, time.perf_counter()
                     while time.perf_counter() - t_s < 0.9:
