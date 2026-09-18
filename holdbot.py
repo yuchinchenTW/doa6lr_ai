@@ -1238,6 +1238,12 @@ def main():
         return r
 
     in_string = [False]            # a follow-up, not the first input
+    # The instant the BUTTON went down, which is the only timestamp a recorded
+    # gap can be measured against. combo_press returns 0.045 s later (it holds
+    # the button that long) and a dash returns almost a second later, so timing
+    # from the call's return counted the hold twice: once in the wait before
+    # the next token and once in every re-press interval.
+    btn_at = [0.0]
 
     def combo_press(step):
         (dx, dy), btn, tok, motion = (step + ([],))[:4]
@@ -1250,6 +1256,9 @@ def main():
                 time.sleep(0.18)
                 inj.up(names_s)
                 dir_touched[0] = time.perf_counter()
+                # no button here, but the next token still times from
+                # the end of this one, the way it did before btn_at
+                btn_at[0] = dir_touched[0]
             return tok
         dash = bool(motion) and motion[-1] == ((dx, dy))
         for mdx, mdy in motion:                      # 236P: tap 2, tap 3, then 6+P
@@ -1298,6 +1307,7 @@ def main():
             time.sleep(0.10)
             inj.down(horiz)
             time.sleep(0.15)
+            btn_at[0] = time.perf_counter()
             inj.down(vert + [btn])
         elif horiz and vert and dy < 0:
             # A DOWN diagonal needs both directions in place before the
@@ -1306,6 +1316,7 @@ def main():
             # diagonals (9P, 9K) were fine.
             inj.down(horiz + vert)
             time.sleep(0.05)
+            btn_at[0] = time.perf_counter()
             inj.down([btn])
         else:
             if horiz:
@@ -1315,6 +1326,7 @@ def main():
                 time.sleep(0.05 if in_string[0] else 0.017)
             # the vertical goes down WITH the button (down alone a frame ahead
             # is a sidestep: 2T came out as id 32)
+            btn_at[0] = time.perf_counter()
             inj.down(vert + [btn])
         # A string follow-up needs a longer press than a single move does.
         # holdbot held a button for --press (0.020 s, 1.2 frames at 60 fps) and
@@ -1839,9 +1851,9 @@ def main():
                             time.sleep(0.004)
                     else:
                         combo_press(st)
-                    t_step = time.perf_counter()
+                    t_step = btn_at[0]
                     got, t_s = [], time.perf_counter()
-                    again_t, t_ag = 0, time.perf_counter()
+                    again_t, t_ag = 0, btn_at[0]
                     while time.perf_counter() - t_s < 0.9:
                         me.refresh()
                         mv_n, k_n = me.get("CurrentMove"), me.get("MoveKind")
@@ -1866,7 +1878,7 @@ def main():
                               > (0.07 if gap_long[0] else 0.045)):
                             combo_press(st)
                             again_t += 1
-                            t_ag = time.perf_counter()
+                            t_ag = btn_at[0]
                         # press the next token as soon as this one is out, the
                         # way the engine does. Waiting for neutral put the
                         # second part of a four-part throw 0.9 s late, where
@@ -3210,9 +3222,9 @@ def main():
                         in_string[0] = False
                         combo["i"] += 1
                         combo["last_mv"] = my_mv_tick
-                        combo["t"] = now
+                        combo["t"] = btn_at[0] or now
                         if not repress:
-                            combo["t_first"] = now
+                            combo["t_first"] = combo["t"]
                         combo["await_"] = True
                         combo["tok"] = tok
                         if not repress:

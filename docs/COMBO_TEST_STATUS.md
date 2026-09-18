@@ -62,6 +62,11 @@ again, separately, in holdbot:
   one press eaten and a single retry landing after the stance had moved on.
   Twelve retries is too many - the spare presses buffer and eat the input after
   them, which turned a 4K into the P string's third hit.
+* every interval is measured from the instant the BUTTON went down, not from
+  when the press routine returned. It holds the button 0.045 s, so timing from
+  the return counted that hold twice - once in the wait before the next token
+  and once in every re-press - and put the second P of `HK,P,P,P,P` at 0.36 s
+  where the demo has it at 0.218
 * the window that watches for a move to appear is itself a floor on how fast
   the next input can go out; 0.12 s there held the 4K back whatever the timing
   rule said
