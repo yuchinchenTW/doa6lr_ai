@@ -1789,7 +1789,12 @@ def main():
                             # as 8084 rather than the standing 177, and the
                             # rest of the combo went with it.
                             t_g = time.perf_counter()
-                            while time.perf_counter() - t_g < gap_t + 0.25:
+                            # ...and no later than three quarters of it. The
+                            # demo waits for the move to END, but a juggle
+                            # follow-up buffers during the recovery: the P
+                            # after 8P went out at 0.78 s, which is the demo's
+                            # timing and visibly late.
+                            while time.perf_counter() - t_g < gap_t * 0.75:
                                 me.refresh()
                                 if me.get("MoveKind") == 0:
                                     break
