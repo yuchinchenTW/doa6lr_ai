@@ -1798,6 +1798,11 @@ def main():
                           f"({steps[args.probe_step][2]}) at each delay")
                 hp0 = foe.get("CurrentHealth")
                 prev_tok = None
+                # When each move APPEARED. The demo's recorded gap is the
+                # interval between two move ids showing up, so this is the
+                # same measurement and the two can be compared directly.
+                # Which input is late is then a number, not a judgement call.
+                prev_app = None
                 n_st = 0
                 while n_st < len(steps):
                     st = steps[n_st]
@@ -1817,7 +1822,7 @@ def main():
                         run_len += 1
                     if run_len > 1 and st[1] == "throw":
                         mvs_c = cc_mv.get(text) or []
-                        got_c, again_c = [], 0
+                        got_c, again_c, app_c = [], 0, []
                         before = me.get("CurrentMove")
                         for part in range(run_len):
                             if part:
@@ -1845,6 +1850,7 @@ def main():
                                 mv_n, k_n = me.get("CurrentMove"), me.get("MoveKind")
                                 if k_n != 0 and mv_n != before:
                                     got_c.append(int(mv_n))
+                                    app_c.append(time.perf_counter())
                                     break
                                 time.sleep(0.002)
                             if got_c:
@@ -1863,9 +1869,16 @@ def main():
                                 mark = "ok"
                             else:
                                 mark = f"WRONG - expected {want_c}"
+                            if k_i and k_i < len(app_c) and idx < len(dts_t):
+                                when_c = (f"  {app_c[k_i] - app_c[k_i - 1]:.3f}s "
+                                          f"(demo {dts_t[idx]:.3f})")
+                            else:
+                                when_c = ""
                             print(f"      {show:<8} -> "
-                                  f"{(str(g_one) if g_one else '-'):<22} {mark}")
+                                  f"{(str(g_one) if g_one else '-'):<22} "
+                                  f"{mark}{when_c}")
                         prev_tok = tok
+                        prev_app = app_c[-1] if app_c else None
                         t_step = btn_at[0]
                         n_st += run_len
                         continue
@@ -1957,12 +1970,15 @@ def main():
                     t_step = btn_at[0]
                     got, t_s = [], time.perf_counter()
                     again_t, t_ag = 0, time.perf_counter()
+                    t_app = None
                     while time.perf_counter() - t_s < 0.9:
                         me.refresh()
                         mv_n, k_n = me.get("CurrentMove"), me.get("MoveKind")
                         fresh = mv_n != before
                         if k_n != 0 and fresh and (not got or got[-1] != mv_n):
                             got.append(int(mv_n))
+                            if t_app is None:
+                                t_app = time.perf_counter()
                         # Nothing out yet: press again, the way comboreplay
                         # does. A follow-up that lands in the previous move's
                         # active frames is simply eaten, and one press per
@@ -2042,9 +2058,16 @@ def main():
                         mark = "ok"
                     else:
                         mark = f"WRONG - expected {want}"
+                    if t_app and prev_app and n_st < len(dts_t):
+                        when = (f"  {t_app - prev_app:.3f}s "
+                                f"(demo {dts_t[n_st]:.3f})")
+                    else:
+                        when = ""
+                    if t_app:
+                        prev_app = t_app
                     if probe_off is None:
                         print(f"      {tok_show:<8} -> "
-                              f"{'>'.join(map(str, got)) or '-':<22} {mark}")
+                              f"{'>'.join(map(str, got)) or '-':<22} {mark}{when}")
                     elif n_st == args.probe_step:
                         print(f"      {probe_off:.2f}s  {tok:<6} -> "
                               f"{'>'.join(map(str, got)) or '-':<22} {mark}")
