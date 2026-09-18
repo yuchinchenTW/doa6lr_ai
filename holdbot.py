@@ -514,6 +514,12 @@ def main():
                          "dash move (e.g. 66P): tries every combination of "
                          "pre-wait, tap length and gap from neutral and prints "
                          "the move id each one produced. Nothing else runs.")
+    ap.add_argument("--probe-step", type=int, default=None, metavar="N",
+                    help="with --test-combo: run the string up to token N with "
+                         "the usual timing, then press token N alone at a "
+                         "sweep of delays with no retries, and print the move "
+                         "each delay produced. N is 0-based, so the last input "
+                         "of an eight-token string is 7.")
     ap.add_argument("--test-repeat", type=int, default=1,
                     help="how many times to run each string in --test-combo")
     ap.add_argument("--dry-run", action="store_true")
@@ -1762,8 +1768,17 @@ def main():
         print(f"test-combo: {len(strings)} string(s) for "
               f"{CHAR_NAMES.get(my_char, my_char)}. Stand in Training with the "
               f"dummy in front of you. Ctrl-C to stop.\n")
+        # Guessing one delay per round trip is what cost the evening the
+        # dash cost, and --probe-dash ended that by walking the space. This
+        # does the same for one token inside a string: everything before it
+        # goes out on the timing that already works, and the token itself is
+        # pressed once, at each delay in turn.
+        offsets = ([round(0.04 + 0.02 * k, 3) for k in range(16)]
+                   if args.probe_step is not None else [None])
         for text in strings:
-            for run_n in range(args.test_repeat):
+            for run_n in range(len(offsets) if args.probe_step is not None
+                               else args.test_repeat):
+                probe_off = offsets[run_n] if args.probe_step is not None else None
                 t_wait = time.perf_counter()
                 while time.perf_counter() - t_wait < 4.0:     # both on their feet
                     me.refresh(); foe.refresh()
@@ -1775,7 +1790,12 @@ def main():
                 gap_long = [True]
                 steps = parse_combo(text)
                 dts_t = cc_dt.get(text) or []
-                print(f"  {text}" + (f"  (run {run_n + 1})" if args.test_repeat > 1 else ""))
+                if probe_off is None:
+                    print(f"  {text}"
+                          + (f"  (run {run_n + 1})" if args.test_repeat > 1 else ""))
+                elif not run_n:
+                    print(f"  {text}: token {args.probe_step} "
+                          f"({steps[args.probe_step][2]}) at each delay")
                 hp0 = foe.get("CurrentHealth")
                 prev_tok = None
                 n_st = 0
@@ -1867,8 +1887,16 @@ def main():
                         # opens in its RECOVERY - sleeping the whole 0.735 s
                         # after H+K put the P visibly late.
                         gap_t = dts_t[n_st] if n_st < len(dts_t) else 0.2
+                        if probe_off is not None and n_st == args.probe_step:
+                            # the swept delay replaces the rule entirely
+                            left_p = probe_off - (time.perf_counter() - t_step)
+                            if left_p > 0:
+                                time.sleep(left_p)
+                            gap_t = 0.0
+                            gap_long[0] = False
                         gap_long[0] = gap_t > 0.4
-                        if gap_long[0]:
+                        if gap_long[0] and not (probe_off is not None
+                                                and n_st == args.probe_step):
                             # A long gap means the demo waited for the previous
                             # move to END. Pressing at half of it lands inside
                             # the animation and the game gives the STRING
@@ -1957,7 +1985,10 @@ def main():
                         # retry landed 0.035 s after the stance had already
                         # moved on, so it came out as a standing kick, 179
                         # instead of 8056. The window is between the two.
-                        elif (not got and again_t < (12 if gap_long[0] else 3)
+                        elif (not got
+                              and not (probe_off is not None
+                                       and n_st == args.probe_step)
+                              and again_t < (12 if gap_long[0] else 3)
                               and me.get("MoveKind") not in (4, 5, 6)
                               and time.perf_counter() - t_ag
                               > (0.07 if gap_long[0] else 0.045)):
@@ -2011,10 +2042,17 @@ def main():
                         mark = "ok"
                     else:
                         mark = f"WRONG - expected {want}"
-                    print(f"      {tok_show:<8} -> {'>'.join(map(str, got)) or '-':<22} {mark}")
+                    if probe_off is None:
+                        print(f"      {tok_show:<8} -> "
+                              f"{'>'.join(map(str, got)) or '-':<22} {mark}")
+                    elif n_st == args.probe_step:
+                        print(f"      {probe_off:.2f}s  {tok:<6} -> "
+                              f"{'>'.join(map(str, got)) or '-':<22} {mark}")
                     n_st += 1
                 dealt = hp0 - foe.get("CurrentHealth")
-                print(f"      damage to the dummy: {dealt if 0 <= dealt < 500 else '?'}\n")
+                if probe_off is None:
+                    print(f"      damage to the dummy: "
+                          f"{dealt if 0 <= dealt < 500 else '?'}\n")
                 time.sleep(1.0)
         inj.release_all()
         return
