@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import shutil
+import math
 import struct
 import sys
 import time
@@ -121,6 +122,28 @@ def find_state_objects(proc, want_char=None, limit=64):
         if now and now != before:
             alive.append(addr)
     return alive[:limit], len(windows), len(alive)
+
+
+def looks_like_pos(proc, addr):
+    """The position object, which is not a state block and so can never match
+    the state scan - the first version reported it NOT FOUND for that reason
+    alone. It holds P1's vec4 at +0x5B0 and P2's at +0x610, and the pair has
+    to be two finite points a sane distance apart."""
+    pts = []
+    for off in (0x5B0, 0x610):
+        raw = proc.read(addr + off, 12)
+        if not raw:
+            return False
+        v = struct.unpack("<fff", raw)
+        if not all(math.isfinite(c) for c in v):
+            return False
+        if abs(v[0]) > 1e6 or abs(v[2]) > 1e6 or not -1e4 < v[1] < 1e5:
+            return False
+        if v == (0.0, 0.0, 0.0):
+            return False
+        pts.append(v)
+    d = math.dist(pts[0], pts[1])
+    return 1.0 < d < 5000.0
 
 
 def module_slots(proc, mod):
@@ -216,23 +239,34 @@ def main():
             print(f"  {name}: not a pointer anchor, skipped")
             continue
         offs = [_int(o) for o in a.get("offsets", [])]
+        is_pos = name.split(":")[0] == "pos"
         hits = []
         for off, val in slots:
             addr = walk(proc, mod[1] + off, offs)
-            if addr is not None and addr in want:
+            if addr is None:
+                continue
+            if looks_like_pos(proc, addr) if is_pos else (addr in want):
                 hits.append((off, addr))
         if hits:
             found[name] = hits
             old = _int(a["module_offset"])
             for off, addr in hits[:4]:
                 mark = "  (unchanged)" if off == old else ""
-                print(f"  {name}: exe+0x{off:X} -> 0x{addr:X}{mark}")
+                extra = ""
+                if is_pos:
+                    x = proc.f32(addr + 0x5B0)
+                    z = proc.f32(addr + 0x5B8)
+                    extra = f"  P1 at ({x:.0f}, {z:.0f})"
+                print(f"  {name}: exe+0x{off:X} -> 0x{addr:X}{mark}{extra}")
             if len(hits) > 4:
                 print(f"  {name}: and {len(hits) - 4} more")
         else:
-            print(f"  {name}: NOT FOUND with its stored offsets {a.get('offsets')}. "
-                  f"The tail of the chain moved too - that needs pointerscan.py "
-                  f"against one of the addresses above.")
+            what = ("a position object (two finite points a sane distance "
+                    "apart)" if is_pos else "any of the state blocks above")
+            print(f"  {name}: NOT FOUND. No slot in the image reaches {what} "
+                  f"through its stored offsets {a.get('offsets')}, so the tail "
+                  f"of this chain moved as well - that one needs "
+                  f"pointerscan.py.")
 
     if not args.write:
         print("\nnothing written. Re-run with --write to update layout.json.")
