@@ -58,6 +58,29 @@ FMTS = {"u8": "<B", "u16": "<H", "u32": "<I"}
 
 
 OBJ = 0x910          # through StrikeType at +0x904, the last field we use
+SIG = [(0x14, "<I", 4, 1, 120),      # character id, never 0 in a match
+       (0x68, "<H", 2, 0, 40000),    # move id
+       (0x108, "<B", 1, 0, 40),      # MoveKind
+       (0x128, "<H", 2, 0, 16),      # Phase
+       (0x174, "<H", 2, 1, 4000),    # per-move frame counter
+       (0x578, "<B", 1, 0, 40),      # MoveType
+       (0x580, "<H", 2, 1, 400),     # health
+       (0x630, "<I", 4, 1, 60000),   # animation length
+       (0x8EC, "<I", 4, 0, 16),      # high / mid / low
+       (0x904, "<B", 1, 0, 40)]      # StrikeType
+
+
+def looks_like_state(proc, addr):
+    """The same signature the scan applies, for one address. A side that is
+    standing still passes this but fails the scan's liveness test, which is
+    why state:P2 came back NOT FOUND on one run and resolved on the next."""
+    for off, fmt, size, lo, hi in SIG:
+        raw = proc.read(addr + off, size)
+        if not raw:
+            return False
+        if not lo <= struct.unpack(fmt, raw)[0] <= hi:
+            return False
+    return True
 
 
 def find_state_objects(proc, want_char=None, limit=64):
@@ -237,6 +260,23 @@ def repair(proc, raw, mod, want_char=None, names=None, log=print):
                 out[name] = off
                 break
         if name not in out:
+            # A side that is standing still never shows up in the live scan,
+            # so "not found" here usually means the object was missed, not
+            # that the chain changed. Chains commonly share a root - state and
+            # state:P2 have always had the same one - so try every root that
+            # did work, and the stored one, and accept on the signature alone.
+            for cand in list(out.values()) + [_int(a["module_offset"])]:
+                addr = walk(proc, mod[1] + cand, offs)
+                if addr is None:
+                    continue
+                if (looks_like_pos(proc, addr, ranges) if is_pos
+                        else looks_like_state(proc, addr)):
+                    out[name] = cand
+                    log(f"  {name}: exe+0x{cand:X} -> 0x{addr:X}  "
+                        f"(matched on the signature; it was idle during the "
+                        f"live scan)")
+                    break
+        if name not in out:
             log(f"  {name}: NOT FOUND - the tail of this chain moved too, "
                 f"which needs pointerscan.py")
     return out
@@ -281,66 +321,21 @@ def main():
         return 1
     print(f"{layout['process']} base 0x{mod[1]:X} size 0x{mod[2]:X}")
 
-    print("scanning the heap for player state blocks...")
-    states, raw_n, n_alive = find_state_objects(proc, args.char)
-    if not states:
-        print(f"no live state blocks found: {raw_n} matched the signature, "
-              f"{n_alive} of them changed at all over 0.35 s.")
-        if raw_n and not n_alive:
-            print("Nothing in memory moved, so the game is not running a live "
-                  "match: check it is not paused, not in a menu, and not on "
-                  "the character select.")
-        else:
-            print("Try --char with the fighter id you are playing.")
-        return 1
-    print(f"  {len(states)} shown; {n_alive} live out of {raw_n} matching "
-          f"the signature:")
-    for a in states[:8]:
-        print(f"    0x{a:X}  char={proc.u32(a + 0x14):<4} "
-              f"hp={proc.u16(a + 0x580):<4} move={proc.u16(a + 0x68)}")
-    want = set(states)
-
-    ranges = heap_ranges(proc)
-    print("walking the executable image...")
-    slots = module_slots(proc, mod)
-    print(f"  {len(slots)} pointer-shaped slots")
-
     names = args.anchor or [n for n, a in raw["anchors"].items()
                             if a.get("kind") == "pointer"]
-    found = {}
+    print("scanning the heap for player state blocks...")
+    found = repair(proc, raw, mod, args.char, names)
     for name in names:
         a = raw["anchors"].get(name)
         if not a or a.get("kind") != "pointer":
-            print(f"  {name}: not a pointer anchor, skipped")
             continue
-        offs = [_int(o) for o in a.get("offsets", [])]
-        is_pos = name.split(":")[0] == "pos"
-        hits = []
-        for off, val in slots:
-            addr = walk(proc, mod[1] + off, offs)
-            if addr is None:
-                continue
-            if (looks_like_pos(proc, addr, ranges) if is_pos
-                    else (addr in want)):
-                hits.append((off, addr))
-        if hits:
-            found[name] = hits
-            old = _int(a["module_offset"])
-            for off, addr in hits[:4]:
-                mark = "  (unchanged)" if off == old else ""
-                extra = ""
-                if is_pos:
-                    a1 = [proc.f32(addr + 0x5B0 + 4 * k) for k in range(3)]
-                    a2 = [proc.f32(addr + 0x610 + 4 * k) for k in range(3)]
-                    extra = (f"  P1 ({a1[0]:.0f}, {a1[1]:.0f}, {a1[2]:.0f}) "
-                             f"P2 ({a2[0]:.0f}, {a2[1]:.0f}, {a2[2]:.0f}) "
-                             f"apart {math.dist(a1, a2):.0f}")
-                print(f"  {name}: exe+0x{off:X} -> 0x{addr:X}{mark}{extra}")
-            if len(hits) > 4:
-                print(f"  {name}: and {len(hits) - 4} more")
+        old = _int(a["module_offset"])
+        if name in found:
+            mark = "  (unchanged)" if found[name] == old else ""
+            print(f"  {name}: exe+0x{found[name]:X}{mark}")
         else:
-            what = ("a position object (two finite points a sane distance "
-                    "apart)" if is_pos else "any of the state blocks above")
+            what = ("a position object" if name.split(":")[0] == "pos"
+                    else "a player state block")
             print(f"  {name}: NOT FOUND. No slot in the image reaches {what} "
                   f"through its stored offsets {a.get('offsets')}, so the tail "
                   f"of this chain moved as well - that one needs "
@@ -353,15 +348,16 @@ def main():
     if not found:
         print("\nnothing to write.")
         return 1
-    shutil.copyfile(LAYOUT, LAYOUT + ".bak")
-    for name, hits in found.items():
-        raw["anchors"][name]["module_offset"] = f"0x{hits[0][0]:X}"
-    with open(LAYOUT, "w", encoding="utf-8") as fh:
-        json.dump(raw, fh, indent=1)
-        fh.write("\n")
+    missing = [n for n in names if n not in found]
+    if missing:
+        print(f"\n  WARNING: {', '.join(missing)} keeps its old offset, "
+              f"which is almost certainly the stale one. Run this again "
+              f"during a round where both sides are moving before "
+              f"trusting it.")
+    write_offsets(raw, found)
     print(f"\nlayout.json updated ({LAYOUT}.bak kept):")
-    for name, hits in found.items():
-        print(f"  {name}: module_offset = 0x{hits[0][0]:X}")
+    for name, off in found.items():
+        print(f"  {name}: module_offset = 0x{off:X}")
     return 0
 
 
