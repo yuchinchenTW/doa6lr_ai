@@ -1188,6 +1188,7 @@ def main():
         """Round-robin until every candidate has 3 tries, then the best mean
         damage, with one try in seven spent on the runner-up so a lucky
         early sample cannot lock a weaker string in."""
+        only_learned = False
         pool = RECIPE_POOL.get(my_char, GENERIC_POOL).get(key) if combo_auto else None
         if pool is not None and key == "default":
             # throw-led sequences are not combo material (no grabbing a
@@ -1206,13 +1207,20 @@ def main():
             if learned and args.combo_learned > 0 and (
                     random.random() < args.combo_learned):
                 pool = learned
+                only_learned = True
         if not pool:
             return None, None
         stats = combo_bank.setdefault(str(my_char), {}).setdefault(str(key), {})
         for r in pool:
             stats.setdefault(r, [0, 0])
         least = min(pool, key=lambda r: stats[r][0])
-        if stats[least][0] < 3:
+        # On a learned turn, round-robin rather than best-mean. Ranking inside
+        # the learned set sent 14 of 19 extra picks to one string: P,P,P,4,6P
+        # led on mean damage and the other seven never came up again after
+        # their three exploration tries. The point of --combo-learned is to see
+        # all of them, so the ordinary turns do the ranking and these spread
+        # the picks evenly.
+        if stats[least][0] < 3 or only_learned:
             r = least
         else:
             ranked = sorted(pool, key=lambda r: -(stats[r][1] / max(1, stats[r][0])))
