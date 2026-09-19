@@ -28,6 +28,7 @@ do not exist and there is nothing to find.
 """
 
 import argparse
+import bisect
 import json
 import os
 import shutil
@@ -124,26 +125,46 @@ def find_state_objects(proc, want_char=None, limit=64):
     return alive[:limit], len(windows), len(alive)
 
 
-def looks_like_pos(proc, addr):
+def heap_ranges(proc):
+    """Private writable committed regions, sorted, for a fast "is this on the
+    heap" test."""
+    out = [(r.base, r.base + r.size)
+           for r in proc.regions(writable_only=True, private_only=True)]
+    out.sort()
+    return out
+
+
+def on_heap(ranges, addr):
+    i = bisect.bisect_right(ranges, (addr, 1 << 63)) - 1
+    return i >= 0 and ranges[i][0] <= addr < ranges[i][1]
+
+
+def looks_like_pos(proc, addr, ranges):
     """The position object, which is not a state block and so can never match
     the state scan - the first version reported it NOT FOUND for that reason
-    alone. It holds P1's vec4 at +0x5B0 and P2's at +0x610, and the pair has
-    to be two finite points a sane distance apart."""
+    alone. It holds P1's vec4 at +0x5B0 and P2's at +0x610.
+
+    Checking only "two finite points a sane distance apart" matched 13514
+    slots, all of them inside loaded DLLs with coordinates of zero. A ring
+    stands at roughly x 12000, y 2100, z 22000, so the magnitudes carry as
+    much signal as the shape does, and the object lives on the heap rather
+    than in a module image."""
+    if not on_heap(ranges, addr):
+        return False
     pts = []
     for off in (0x5B0, 0x610):
         raw = proc.read(addr + off, 12)
         if not raw:
             return False
-        v = struct.unpack("<fff", raw)
-        if not all(math.isfinite(c) for c in v):
+        x, y, z = struct.unpack("<fff", raw)
+        if not all(math.isfinite(c) for c in (x, y, z)):
             return False
-        if abs(v[0]) > 1e6 or abs(v[2]) > 1e6 or not -1e4 < v[1] < 1e5:
+        if not 100.0 < abs(x) < 1e6 or not 100.0 < abs(z) < 1e6:
             return False
-        if v == (0.0, 0.0, 0.0):
+        if not -2000.0 < y < 5e4:
             return False
-        pts.append(v)
-    d = math.dist(pts[0], pts[1])
-    return 1.0 < d < 5000.0
+        pts.append((x, y, z))
+    return 5.0 < math.dist(pts[0], pts[1]) < 3000.0
 
 
 def module_slots(proc, mod):
@@ -226,6 +247,7 @@ def main():
               f"hp={proc.u16(a + 0x580):<4} move={proc.u16(a + 0x68)}")
     want = set(states)
 
+    ranges = heap_ranges(proc)
     print("walking the executable image...")
     slots = module_slots(proc, mod)
     print(f"  {len(slots)} pointer-shaped slots")
@@ -245,7 +267,8 @@ def main():
             addr = walk(proc, mod[1] + off, offs)
             if addr is None:
                 continue
-            if looks_like_pos(proc, addr) if is_pos else (addr in want):
+            if (looks_like_pos(proc, addr, ranges) if is_pos
+                    else (addr in want)):
                 hits.append((off, addr))
         if hits:
             found[name] = hits
@@ -254,9 +277,11 @@ def main():
                 mark = "  (unchanged)" if off == old else ""
                 extra = ""
                 if is_pos:
-                    x = proc.f32(addr + 0x5B0)
-                    z = proc.f32(addr + 0x5B8)
-                    extra = f"  P1 at ({x:.0f}, {z:.0f})"
+                    a1 = [proc.f32(addr + 0x5B0 + 4 * k) for k in range(3)]
+                    a2 = [proc.f32(addr + 0x610 + 4 * k) for k in range(3)]
+                    extra = (f"  P1 ({a1[0]:.0f}, {a1[1]:.0f}, {a1[2]:.0f}) "
+                             f"P2 ({a2[0]:.0f}, {a2[1]:.0f}, {a2[2]:.0f}) "
+                             f"apart {math.dist(a1, a2):.0f}")
                 print(f"  {name}: exe+0x{off:X} -> 0x{addr:X}{mark}{extra}")
             if len(hits) > 4:
                 print(f"  {name}: and {len(hits) - 4} more")
