@@ -37,6 +37,7 @@ import argparse
 import ctypes
 import json
 import os
+import random
 import struct
 import sys
 import time
@@ -468,6 +469,15 @@ def main():
                          "chains it as a string instead of separate jabs. "
                          "Tokens: P K T S PK HK, optional numpad direction "
                          "(6P, 3K, 2K); comma separated. 'none' disables")
+    ap.add_argument("--combo-learned", type=float, default=0.0, metavar="FRAC",
+                    help="how often to restrict the choice to the combos the "
+                         "Combo Challenge taught (combo_challenge.json), 0..1. "
+                         "0 is the old behaviour: they compete with the 14 "
+                         "generic strings, so each gets about one turn in 21. "
+                         "0.8 means four times in five the pick comes from the "
+                         "learned set only. The net-damage bandit still ranks "
+                         "inside whichever set is used, and the scores stay "
+                         "per string, so nothing is distorted.")
     ap.add_argument("--combo-range", type=float, default=110.0,
                     help="only juggle an airborne foe (kind 9) from within this")
     ap.add_argument("--poke-gap", type=float, default=0.45,
@@ -1183,9 +1193,19 @@ def main():
             # throw-led sequences are not combo material (no grabbing a
             # character in hit stun); best_throw uses those instead
             at_wall = foe_at_wall()
-            pool = pool + [t for t, w in cc_extra(my_char)
-                           if t not in pool and not t.split(",")[0].endswith("T")
-                           and (at_wall or not w)]
+            # the ones the Combo Challenge taught and --test-combo verified
+            learned = [t for t, w in cc_extra(my_char)
+                       if not t.split(",")[0].endswith("T")
+                       and (at_wall or not w)]
+            pool = pool + [t for t in learned if t not in pool]
+            # With 14 generic strings beside them each learned combo comes up
+            # about one turn in 21. This spends a given fraction of the turns
+            # inside the learned set only; the bandit still ranks within it and
+            # the per-string scores are untouched, so the two sets stay
+            # comparable if the fraction is lowered again.
+            if learned and args.combo_learned > 0 and (
+                    random.random() < args.combo_learned):
+                pool = learned
         if not pool:
             return None, None
         stats = combo_bank.setdefault(str(my_char), {}).setdefault(str(key), {})
