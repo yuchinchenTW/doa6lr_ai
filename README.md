@@ -139,6 +139,47 @@ code and move each produces; `--probe-cmd N` hunts for the input recipe behind o
 how "← → P+K" was identified as cmd 5780). It clears single-move stages and most of a multi-task
 stage (11 of 19 inputs on one); tasks that need a specific move variant at range are still open.
 
+## After a game update
+
+A patch moves the executable's static data, so the root of every pointer chain
+in `layout.json` goes stale and the bot cannot find anything:
+
+```
+anchors did not resolve: {'state': None, 'state:P2': None, 'pos': ...}
+```
+
+**Start a match and run the bot again.** It repairs itself: it finds the player
+state blocks by the field signature it already knows (a fighter id, a health in
+1..400, a frame counter that ticks, and six more fields all at once), walks the
+executable image for the slot that reaches them through the stored offsets, and
+writes the new roots to `layout.json`, keeping a `.bak`.
+
+The struct offsets at the tail of each chain are the game's own field layout and
+almost never move, which is what makes this work. The 2026-09-19 patch moved all
+three roots and not one tail:
+
+| anchor | before | after |
+|---|---|---|
+| `state`, `state:P2` | `0x7F55158` | `0x7EF9148` |
+| `pos` | `0x5DAFD10` | `0x5D53D10` |
+
+To look before it writes, run the repair on its own:
+
+```bat
+python relocate.py                 :: report only
+python relocate.py --write         :: apply
+python relocate.py --char 35       :: pin the scan to one fighter id
+```
+
+Two things to know. It needs a **live match** - in a menu or on the character
+select the state blocks do not exist. And a side standing still is invisible to
+the liveness test, so an anchor can come back NOT FOUND while the chain is
+perfectly fine; it retries such an anchor against the roots that did work, and
+`--write` warns if any anchor kept its old offset.
+
+If an anchor is still not found, the tail moved too. That is rare and needs
+`pointerscan.py` against one of the state block addresses it printed.
+
 ## Layout
 
 | File | Purpose |
@@ -149,7 +190,8 @@ stage (11 of 19 inputs on one); tasks that need a specific move variant at range
 | `fields.py` + `layout.json` | Pointer chain resolution and field reads |
 | `pad.py` | Keyboard / virtual pad injection, hold table |
 | `memlib.py` | `ReadProcessMemory` wrapper, region enumeration |
-| `autoscan.py`, `probe.py`, `timeline.py`, `analyse2.py`, `pointerscan.py`, `scanner.py`, `watch.py`, `reanalyse.py` | Field-hunting toolchain; rerun when a game update breaks `layout.json` |
+| `relocate.py` | Repairs `layout.json` after a game update; the bot calls it itself on a stale layout |
+| `autoscan.py`, `probe.py`, `timeline.py`, `analyse2.py`, `pointerscan.py`, `scanner.py`, `watch.py`, `reanalyse.py` | Field-hunting toolchain, for when a chain's tail moves and not just its root |
 | `docs/NOTES.md` | Research log (Traditional Chinese): how the addresses were found, measured field values, DOA6 input pitfalls, match results per version |
 
 ## Known limits
@@ -163,8 +205,9 @@ stage (11 of 19 inputs on one); tasks that need a specific move variant at range
 - Command throws cannot be broken; every new opponent costs one grab per offensive hold.
 - There is no facing field in memory; a hold with very few frames left can still come out
   mirrored after a side swap.
-- The address table matches the Last Round build released 2026-06; after a game update the
-  toolchain has to be rerun.
+- The address table is repaired automatically after a game update, as long as only the roots
+  of the pointer chains moved. A patch that changes the struct offsets themselves still needs
+  the field-hunting toolchain.
 
 ## License
 

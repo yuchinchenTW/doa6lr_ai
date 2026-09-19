@@ -13,7 +13,7 @@
   },
   "state:P2": {
    "kind": "pointer",
-   "module_offset": "0x7F55158",
+   "module_offset": "0x7EF9148",
    "offsets": [
     "0x3A8",
     "0x30"

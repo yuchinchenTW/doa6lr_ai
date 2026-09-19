@@ -117,6 +117,44 @@ python holdbot.py                     # 預設 3-way
 印出各自的碼和招式；`--probe-cmd N` 找出某個碼的按法（「←→ P+K」就是這樣確認為 cmd 5780）。
 單招關卡能過，多任務的關卡目前能做到 19 個輸入中的 11 個，需要特定距離變體招式的任務還沒解。
 
+## 遊戲更新之後
+
+改版會搬動執行檔裡的靜態資料，`layout.json` 裡每條指標鏈的**起點**就失效了，
+機器人什麼都找不到：
+
+```
+anchors did not resolve: {'state': None, 'state:P2': None, 'pos': ...}
+```
+
+**開著對戰，直接重跑一次就好。** 它會自己修：用本來就知道的欄位簽章找出角色狀態
+物件（角色 id、1 到 400 的血量、會跳動的幀計數器，加上另外六個欄位同時成立），
+再掃執行檔映像找出能通到那些物件的槽位，把新的起點寫回 `layout.json`，舊檔留成
+`.bak`。
+
+之所以行得通，是因為指標鏈**尾巴**的結構偏移是遊戲自己的欄位配置，幾乎不會變。
+2026-09-19 那次改版三個起點全搬了，尾巴一個都沒動：
+
+| anchor | 舊 | 新 |
+|---|---|---|
+| `state`、`state:P2` | `0x7F55158` | `0x7EF9148` |
+| `pos` | `0x5DAFD10` | `0x5D53D10` |
+
+想先看結果再決定要不要寫入，就單獨跑修復工具：
+
+```bat
+python relocate.py                 :: 只report不改檔
+python relocate.py --write         :: 寫入
+python relocate.py --char 35       :: 把掃描鎖在某個角色 id
+```
+
+兩件事要知道。它需要**實際對戰中**，選單和選角畫面裡狀態物件還不存在。另外，
+站著不動的一方在存活判斷裡是隱形的，所以某個 anchor 可能顯示 NOT FOUND 但那條鏈
+其實好好的；遇到這種情況它會拿其他成功的起點回頭重試，而且 `--write` 會警告哪個
+anchor 保留了舊偏移。
+
+如果重試後還是找不到，那才是尾巴也變了。那種情況很少見，要拿它印出來的狀態物件
+位址去跑 `pointerscan.py`。
+
 ## 專案結構
 
 | 檔案 | 用途 |
@@ -127,7 +165,8 @@ python holdbot.py                     # 預設 3-way
 | `fields.py` + `layout.json` | 解析指標鏈、讀欄位 |
 | `pad.py` | 鍵盤／虛擬手把注入、Hold 對照表 |
 | `memlib.py` | `ReadProcessMemory` 封裝、記憶體區段列舉 |
-| `autoscan.py`、`probe.py`、`timeline.py`、`analyse2.py`、`pointerscan.py`、`scanner.py`、`watch.py`、`reanalyse.py` | 找欄位用的工具鏈；遊戲更新讓 `layout.json` 失效時重跑 |
+| `relocate.py` | 遊戲更新後修 `layout.json`；機器人偵測到失效會自己呼叫它 |
+| `autoscan.py`、`probe.py`、`timeline.py`、`analyse2.py`、`pointerscan.py`、`scanner.py`、`watch.py`、`reanalyse.py` | 找欄位用的工具鏈；指標鏈連尾巴都被改動時才需要 |
 | `docs/NOTES.md` | 開發過程的技術筆記：位址怎麼找到的、每個欄位的實測值、DOA6 輸入的坑、各版本實戰結果 |
 
 ## 已知限制
@@ -137,7 +176,8 @@ python holdbot.py                     # 預設 3-way
 - 7 幀衝刺投在 100 以內起手，除了 2K 沒有反應時間；摔角手的站立投／下段投二擇仍是一半一半。
 - 方向投解不掉；每隻新對手的每個 OH 都要先被抓一次。
 - 面向沒有記憶體欄位，換邊後剩餘幀數很少的 Hold 仍可能鏡像。
-- 位址表對應 2026-06 上市的 Last Round 版本；遊戲更新後要用工具鏈重找。
+- 遊戲更新後位址表會自動修復，前提是只有指標鏈的起點被搬動。如果改版連結構偏移本身都改了，
+  還是要用找欄位的工具鏈重來。
 
 ## 授權
 
