@@ -24,9 +24,13 @@ Survival streaks per character (rounds won–lost in one sitting): Nyotengu 155�
 Mai Shiranui 83–1 and 62–1, Kula Diamond 83–1. Hold rate 85–92% across a whole run,
 100% is common in single matches.
 
+**On Legend, the game's hardest CPU, the bot wins about 95% of rounds.** Recent sittings as
+Minato: 81–1, 68–1 and 42–1.
+
 ## Status
 
-- **Three characters trained: Nyotengu (id 21), Mai Shiranui (id 30), Kula Diamond (id 31).**
+- **Four characters trained: Nyotengu (id 21), Mai Shiranui (id 30), Kula Diamond (id 31),
+  Minato (id 35).**
   Each has a poke, a combo pool and match statistics. Any other character falls back to a
   generic pool and a P poke and has to accumulate its statistics from scratch. On the opponent
   side the tables (`startup.json` etc.) cover only the CPU characters actually met so far; a new
