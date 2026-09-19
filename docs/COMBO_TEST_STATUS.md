@@ -39,6 +39,39 @@ twelve on a long one.
 The `--test-combo` block was checked byte for byte before and after that
 change and is identical, so the eight rows above still stand.
 
+## Getting them to appear in a match
+
+They share a pool with 14 generic strings, so each came up about one turn in 21:
+three tries across 183 openers. `--combo-learned FRAC` spends that fraction of
+the picks inside the learned set only, and a learned turn round-robins rather
+than ranking, because ranking inside the set sent 14 of 19 extra picks to the
+one string with the best mean.
+
+Measured at `--combo-learned 0.8`, 264 openers: every non-throw learned string
+ran 17 to 23 times, against 3 before. `214T` never appears by design, since a
+character in hit stun cannot be grabbed; `best_throw` uses it instead.
+
+## What stops them finishing
+
+198 of 264 strings still end after one input. The reasons, from one 516-hold
+run:
+
+| why | times | mean inputs |
+|---|---|---|
+| string finished | 112 | 1.1 |
+| out of reach | 43 | 0.1 |
+| they recovered | 38 | 0.9 |
+| foe left hit stun (kinds 3,5,7,12,13,16) | 35 | 1.0 |
+| input never came out | 13 | 1.0 |
+| round over | 12 | 0.5 |
+| we got hit or thrown | 8 | 0.9 |
+
+Timing is 13 of those, and they are `6P,P`, not any verified string. The real
+limit is that a learned combo is started on top of whatever opener connected -
+a jab, a poke, a hold - and that hit does not produce the stun the Combo
+Challenge demo had. `out of reach` at a mean of 0.1 inputs means the string was
+cut before its first input even went out.
+
 ## What the input code has to get right
 
 Each of these was measured, and each was found once in comboreplay and then
