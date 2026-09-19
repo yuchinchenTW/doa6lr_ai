@@ -55,22 +55,29 @@ SIZES = {"u8": 1, "u16": 2, "u32": 4}
 FMTS = {"u8": "<B", "u16": "<H", "u32": "<I"}
 
 
+OBJ = 0x910          # through StrikeType at +0x904, the last field we use
+
+
 def find_state_objects(proc, want_char=None, limit=64):
     """Heap objects matching the player-state signature, confirmed live.
 
-    The first version checked each candidate with six reads and stopped at the
-    first 256 matches. Zeroed memory passes a range check - character 0,
-    health 2, move 0 - so it filled up on blank pages in the first region and
-    never reached a real object. Everything is compared in numpy across the
-    whole region instead, and the fields that are never zero in a live match
-    (the character id and the per-move frame counter) have to be non-zero.
+    Two things went wrong before this. Checking six fields per candidate with
+    a read each, and stopping at the first 256 matches, filled the list with
+    blank pages from the first region: character 0, health 2, move 0 all pass
+    a range check. Then 24k matches survived a tighter signature and none of
+    them ticked, because "ticked" meant one named field, the per-move frame
+    counter, and a patch that moved the static data can move a field too.
+
+    So: the whole signature is compared in numpy across each region, using
+    every field layout.json knows including the ones far into the object, and
+    liveness is "any byte of the object changed", not one field.
     """
-    hits = []
+    windows = []                      # (address, the object as it was)
     for r in proc.regions(writable_only=True, private_only=True, chunk=1 << 24):
         buf = proc.read(r.base, r.size)
-        if not buf or len(buf) < 0x1000:
+        if not buf or len(buf) < OBJ + 8:
             continue
-        n = (len(buf) - 0x582) // 8
+        n = (len(buf) - OBJ) // 8
         if n <= 0:
             continue
 
@@ -83,24 +90,37 @@ def find_state_objects(proc, want_char=None, limit=64):
         kind = fld(0x108, np.uint8)
         phase = fld(0x128, np.uint16)
         frame = fld(0x174, np.uint16)
+        mtype = fld(0x578, np.uint8)
         hp = fld(0x580, np.uint16)
+        anim = fld(0x630, np.uint32)
+        hml = fld(0x8EC, np.uint32)
+        strike = fld(0x904, np.uint8)
 
-        ok = ((char >= 1) & (char <= 120)      # a real fighter id, never 0
+        ok = ((char >= 1) & (char <= 120)        # a fighter id, never 0
               & (hp >= 1) & (hp <= 400)
-              & (frame >= 1) & (frame <= 4000)  # the counter always ticks
-              & (kind <= 40) & (phase <= 16) & (move <= 40000))
+              & (frame >= 1) & (frame <= 4000)   # the counter always ticks
+              & (kind <= 40) & (phase <= 16) & (move <= 40000)
+              & (mtype <= 40) & (strike <= 40)
+              & (anim >= 1) & (anim <= 60000)    # an animation has a length
+              & (hml <= 16))
         if want_char is not None:
             ok &= (char == want_char)
         for i in np.nonzero(ok)[0]:
-            hits.append(r.base + int(i) * 8)
-        if len(hits) > 4000:
+            o = int(i) * 8
+            windows.append((r.base + o, buf[o:o + OBJ]))
+        if len(windows) > 200000:
+            print("  (stopping the scan at 200k matches - tighten with --char)")
             break
 
-    # a real state block ticks: the frame counter advances while the game runs
-    first = {a: proc.u16(a + 0x174) for a in hits}
+    # Liveness: ANY byte of the object changed. Naming one field assumes that
+    # field is still where it was, which is the thing a patch breaks.
     time.sleep(0.35)
-    alive = [a for a in hits if proc.u16(a + 0x174) != first.get(a)]
-    return alive[:limit], len(hits)
+    alive = []
+    for addr, before in windows:
+        now = proc.read(addr, OBJ)
+        if now and now != before:
+            alive.append(addr)
+    return alive[:limit], len(windows), len(alive)
 
 
 def module_slots(proc, mod):
@@ -165,14 +185,18 @@ def main():
     print(f"{layout['process']} base 0x{mod[1]:X} size 0x{mod[2]:X}")
 
     print("scanning the heap for player state blocks...")
-    states, raw_n = find_state_objects(proc, args.char)
+    states, raw_n, n_alive = find_state_objects(proc, args.char)
     if not states:
-        print(f"no live state blocks found ({raw_n} matched the signature but "
-              f"none had a frame counter that advanced).")
-        print("Is a match actually running, and not paused? In a menu or "
-              "character select these objects do not exist yet.")
+        print(f"no live state blocks found: {raw_n} matched the signature, "
+              f"{n_alive} of them changed at all over 0.35 s.")
+        if raw_n and not n_alive:
+            print("Nothing in memory moved, so the game is not running a live "
+                  "match: check it is not paused, not in a menu, and not on "
+                  "the character select.")
+        else:
+            print("Try --char with the fighter id you are playing.")
         return 1
-    print(f"  {len(states)} live candidate(s) out of {raw_n} matching "
+    print(f"  {len(states)} shown; {n_alive} live out of {raw_n} matching "
           f"the signature:")
     for a in states[:8]:
         print(f"    0x{a:X}  char={proc.u32(a + 0x14):<4} "
