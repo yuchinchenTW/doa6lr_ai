@@ -27,6 +27,12 @@ Mai Shiranui 83–1 and 62–1, Kula Diamond 83–1. Hold rate 85–92% across a
 **On Legend, the game's hardest CPU, the bot wins about 95% of rounds.** Recent sittings as
 Minato: 81–1, 68–1 and 42–1.
 
+![DOA6LR survival high-score board on LEGEND difficulty: all ten places held by the bot, four as Nyotengu and six as Minato](docs/legend_record.png)
+
+The survival board on **Legend**, the hardest CPU. All ten places are the bot's: Nyotengu 1st,
+2nd, 4th and 9th (5,324,600 down to 1,277,000), Minato 3rd, 5th, 6th, 7th, 8th and 10th
+(4,534,400 down to 585,800).
+
 ## Status
 
 - **Four characters trained: Nyotengu (id 21), Mai Shiranui (id 30), Kula Diamond (id 31),
