@@ -541,8 +541,28 @@ def main():
     proc = Process(pid)
     anchors = locate_all(proc, layout)
     if any(v is None for v in anchors.values()):
-        print(f"anchors did not resolve: {anchors}. Not in a match, or the "
-              f"layout is stale (re-run autoscan/pointerscan).")
+        # A game patch moves the executable's static data and every chain's
+        # root goes stale, while the tails - the game's own struct offsets -
+        # stay put. That used to mean reading an error and running two tools by
+        # hand. Repair it here instead: find the player state blocks by the
+        # field signature layout.json already stores, then find the slot in the
+        # image that reaches them through the stored offsets.
+        print(f"anchors did not resolve: {anchors}")
+        print("the layout looks stale after a game update - repairing it:")
+        import relocate
+        raw_l = json.load(open("layout.json", encoding="utf-8"))
+        mod_l = proc.module(layout["process"])
+        found_l = relocate.repair(proc, raw_l, mod_l) if mod_l else {}
+        if found_l:
+            relocate.write_offsets(raw_l, found_l)
+            for k_l, v_l in found_l.items():
+                print(f"  {k_l}: module_offset = 0x{v_l:X}")
+            print("  layout.json updated (layout.json.bak kept)")
+            layout = load_layout()
+            anchors = locate_all(proc, layout)
+    if any(v is None for v in anchors.values()):
+        print(f"anchors still did not resolve: {anchors}. Start a match and "
+              f"try again; if it persists, run relocate.py to see why.")
         sys.exit(2)
     side_confirmed = [args.me != "auto"]
     side_votes = [0]

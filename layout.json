@@ -1,148 +1,148 @@
 {
-  "process": "DOA6LR.exe",
-  "anchors": {
-    "state": {
-      "kind": "pointer",
-      "module_offset": "0x7F55158",
-      "offsets": [
-        "0x8",
-        "0x3A8",
-        "0x30"
-      ],
-      "_comment": "[exe+0x7F55158] = P2 player obj R; [R+8] = P1 player obj S; [S+0x3A8] = Q; Q+0x30 = P1 state object"
-    },
-    "state:P2": {
-      "kind": "pointer",
-      "module_offset": "0x7F55158",
-      "offsets": [
-        "0x3A8",
-        "0x30"
-      ],
-      "_comment": "P2 state object by its own chain: [R+0x3A8]+0x30. It was P1+0x10DFA0 in the first matches and P1-0x2FBA0 in a later one - the blocks are NOT a fixed stride apart, so never derive one side from the other"
-    },
-    "pos": {
-      "kind": "pointer",
-      "module_offset": "0x5DAFD10",
-      "offsets": [
-        "0x0"
-      ],
-      "_comment": "position object; P1 vec4 at +0x5B0, P2 at +0x610"
-    }
+ "process": "DOA6LR.exe",
+ "anchors": {
+  "state": {
+   "kind": "pointer",
+   "module_offset": "0x7EF9148",
+   "offsets": [
+    "0x8",
+    "0x3A8",
+    "0x30"
+   ],
+   "_comment": "[exe+0x7F55158] = P2 player obj R; [R+8] = P1 player obj S; [S+0x3A8] = Q; Q+0x30 = P1 state object"
   },
-  "players": {
-    "P1": {
-      "state": "0x0",
-      "pos": "0x0"
-    },
-    "P2": {
-      "state": "0x0",
-      "pos": "0x60"
-    }
+  "state:P2": {
+   "kind": "pointer",
+   "module_offset": "0x7F55158",
+   "offsets": [
+    "0x3A8",
+    "0x30"
+   ],
+   "_comment": "P2 state object by its own chain: [R+0x3A8]+0x30. It was P1+0x10DFA0 in the first matches and P1-0x2FBA0 in a later one - the blocks are NOT a fixed stride apart, so never derive one side from the other"
   },
-  "fields": {
-    "CurrentCharacter": [
-      "0x14",
-      "u32",
-      "state"
-    ],
-    "CurrentMove": [
-      "0x68",
-      "u16",
-      "state"
-    ],
-    "CommandCode": [
-      "0x100",
-      "u16",
-      "state"
-    ],
-    "MoveKind": [
-      "0x108",
-      "u8",
-      "state"
-    ],
-    "Phase": [
-      "0x128",
-      "u16",
-      "state"
-    ],
-    "CurrentMoveFrame": [
-      "0x174",
-      "u16",
-      "state"
-    ],
-    "InStartup": [
-      "0x1A4",
-      "u8",
-      "state"
-    ],
-    "MoveType": [
-      "0x578",
-      "u8",
-      "state"
-    ],
-    "CurrentHealth": [
-      "0x580",
-      "u16",
-      "state"
-    ],
-    "BreakGauge": [
-      "0x584",
-      "u16",
-      "state"
-    ],
-    "AnimLength": [
-      "0x630",
-      "u32",
-      "state"
-    ],
-    "HighMidLowGround": [
-      "0x8EC",
-      "u32",
-      "state"
-    ],
-    "StrikeType": [
-      "0x904",
-      "u8",
-      "state"
-    ],
-    "XAxis": [
-      "0x5B0",
-      "f32",
-      "pos"
-    ],
-    "YAxis": [
-      "0x5B4",
-      "f32",
-      "pos"
-    ],
-    "ZAxis": [
-      "0x5B8",
-      "f32",
-      "pos"
-    ],
-    "BreakMeter": [
-      "0x5B4",
-      "u16",
-      "state"
-    ]
-  },
-  "globals": {},
-  "notes": {
-    "Phase": "0 startup, 1 active, 2 recovery; idle is 0 too. A hold is Phase 1 from frame 2 to 21 (its catch window), then 2 until 33",
-    "MoveType": "+0x578: 2 idle/walk, 1 performing any command (strike, throw, hold, guard, sidestep), 3 in hit stun, 5 throw connected (both sides). Coarse; use MoveKind for what the command is",
-    "StrikeType": "0 high P, 1 high K, 2 mid P, 5 low K observed; latches after the move like DOA5",
-    "HighMidLowGround": "1 high, 2 mid, 3 low observed; latches",
-    "CommandCode": "strikes >= 1000 (1000 P, 1100 K, 1120 2K, 1060 6P); throw T = 363 (move 8142, connected 8207/8208, 60 dmg); holds 4H/6H = 168 (moves 155/154, active frames 2..21, recovery to 33); guard = 284 (move 270), crouch guard 285 (move 271); sidestep 326/327 (moves 32/24). Latches (P2 idle kept 1000), and a CPU strike read 254 - not a strike gate",
-    "CurrentMove": "per-character move id; P1 (char 21): P=176 K=179 2K=181. Hit reactions on P2: 24169/24073/24008/24167. 0 = idle",
-    "CurrentMoveFrame": "1 at move start, +1 per frame; active began at 15 (P), 16 (K, 6P), 18 (2K) for char 21",
-    "TotalStartup": "NOT found as a stored field; derive from Phase transitions per (character, move)",
-    "Health": "CurrentHealth +0x580 u16: 300 at full; P did 14, K did 16 to char 5; training mode regenerates to 300 within ~1.5 s",
-    "verified": "2026-09-14 on DOA6LR.exe (Steam build of that date), Free Training, P1 char 21 vs P2 char 5",
-    "Holds": "7H move 152 (code 167), 1H 156 (325), mid hold code 168 with ids 154/155. DOA6 Versus/Free Training has a 'Holds: 3-way / 4-way' setting: in 3-way 4H covers both mids and 6H is a plain guard (move 270); in 4-way 4H = mid punch, 6H = mid kick (DOA5 rule). holdbot --hold-mode must match. Direction and H must be sent in ONE SendInput call; a direction that arrives first turns 7/1 into movement + guard. Catch window: Phase 1 from frame ~4 to ~22 after input",
-    "MoveKind": "+0x108 u8 - the DOA5 MoveType equivalent: 3 strike (all four strikes), 16 throw startup, 5 hold, 0 idle/guard/movement. Constant for the whole move. THIS is the strike gate; MoveType +0x578 and CommandCode cannot tell strikes from throws/holds (a CPU strike, move 8026, had CommandCode 254)",
-    "InStartup": "+0x1A4 is NOT reliable: read 0 on an idle P1 in a later match. Do not gate on it",
-    "P2": "resolved through anchor 'state:P2' (per-side anchors: a field's anchor name plus ':<side>' overrides the shared anchor for that side). The 0x10DFA0 stride seen on 2026-09-14 evening did not survive a character change",
-    "BreakGauge": "+0x584 u16 = Break Gauge, CONFIRMED 2026-09-15: at >= 150 the bot's 4S (back + I) came out as the Break Hold (our ids 8407/8409, caught a low kick and a mid punch). Rises by half the damage taken, also on damage dealt in live matches (seen 0..170 on our side). On-screen bars were FULL at 135 (ours) and 172 (theirs): the field keeps counting past full, 100 = full (--gauge-max 100). S alone = Fatal Rush (8399) - the direction must register a frame before S",
-    "BreakMeter": "+0x5B4 u16 = the Break Gauge shown on screen. 0..200, 200 = full bar, a match starts at 100, carries over between rounds, Break Hold spends ~100. Confirmed live 2026-09-15 (P1 pinned at 200 with a full bar; P2 104->147 while taking hits). +0x584 is only a running total."
+  "pos": {
+   "kind": "pointer",
+   "module_offset": "0x5D53D10",
+   "offsets": [
+    "0x0"
+   ],
+   "_comment": "position object; P1 vec4 at +0x5B0, P2 at +0x610"
   }
+ },
+ "players": {
+  "P1": {
+   "state": "0x0",
+   "pos": "0x0"
+  },
+  "P2": {
+   "state": "0x0",
+   "pos": "0x60"
+  }
+ },
+ "fields": {
+  "CurrentCharacter": [
+   "0x14",
+   "u32",
+   "state"
+  ],
+  "CurrentMove": [
+   "0x68",
+   "u16",
+   "state"
+  ],
+  "CommandCode": [
+   "0x100",
+   "u16",
+   "state"
+  ],
+  "MoveKind": [
+   "0x108",
+   "u8",
+   "state"
+  ],
+  "Phase": [
+   "0x128",
+   "u16",
+   "state"
+  ],
+  "CurrentMoveFrame": [
+   "0x174",
+   "u16",
+   "state"
+  ],
+  "InStartup": [
+   "0x1A4",
+   "u8",
+   "state"
+  ],
+  "MoveType": [
+   "0x578",
+   "u8",
+   "state"
+  ],
+  "CurrentHealth": [
+   "0x580",
+   "u16",
+   "state"
+  ],
+  "BreakGauge": [
+   "0x584",
+   "u16",
+   "state"
+  ],
+  "AnimLength": [
+   "0x630",
+   "u32",
+   "state"
+  ],
+  "HighMidLowGround": [
+   "0x8EC",
+   "u32",
+   "state"
+  ],
+  "StrikeType": [
+   "0x904",
+   "u8",
+   "state"
+  ],
+  "XAxis": [
+   "0x5B0",
+   "f32",
+   "pos"
+  ],
+  "YAxis": [
+   "0x5B4",
+   "f32",
+   "pos"
+  ],
+  "ZAxis": [
+   "0x5B8",
+   "f32",
+   "pos"
+  ],
+  "BreakMeter": [
+   "0x5B4",
+   "u16",
+   "state"
+  ]
+ },
+ "globals": {},
+ "notes": {
+  "Phase": "0 startup, 1 active, 2 recovery; idle is 0 too. A hold is Phase 1 from frame 2 to 21 (its catch window), then 2 until 33",
+  "MoveType": "+0x578: 2 idle/walk, 1 performing any command (strike, throw, hold, guard, sidestep), 3 in hit stun, 5 throw connected (both sides). Coarse; use MoveKind for what the command is",
+  "StrikeType": "0 high P, 1 high K, 2 mid P, 5 low K observed; latches after the move like DOA5",
+  "HighMidLowGround": "1 high, 2 mid, 3 low observed; latches",
+  "CommandCode": "strikes >= 1000 (1000 P, 1100 K, 1120 2K, 1060 6P); throw T = 363 (move 8142, connected 8207/8208, 60 dmg); holds 4H/6H = 168 (moves 155/154, active frames 2..21, recovery to 33); guard = 284 (move 270), crouch guard 285 (move 271); sidestep 326/327 (moves 32/24). Latches (P2 idle kept 1000), and a CPU strike read 254 - not a strike gate",
+  "CurrentMove": "per-character move id; P1 (char 21): P=176 K=179 2K=181. Hit reactions on P2: 24169/24073/24008/24167. 0 = idle",
+  "CurrentMoveFrame": "1 at move start, +1 per frame; active began at 15 (P), 16 (K, 6P), 18 (2K) for char 21",
+  "TotalStartup": "NOT found as a stored field; derive from Phase transitions per (character, move)",
+  "Health": "CurrentHealth +0x580 u16: 300 at full; P did 14, K did 16 to char 5; training mode regenerates to 300 within ~1.5 s",
+  "verified": "2026-09-14 on DOA6LR.exe (Steam build of that date), Free Training, P1 char 21 vs P2 char 5",
+  "Holds": "7H move 152 (code 167), 1H 156 (325), mid hold code 168 with ids 154/155. DOA6 Versus/Free Training has a 'Holds: 3-way / 4-way' setting: in 3-way 4H covers both mids and 6H is a plain guard (move 270); in 4-way 4H = mid punch, 6H = mid kick (DOA5 rule). holdbot --hold-mode must match. Direction and H must be sent in ONE SendInput call; a direction that arrives first turns 7/1 into movement + guard. Catch window: Phase 1 from frame ~4 to ~22 after input",
+  "MoveKind": "+0x108 u8 - the DOA5 MoveType equivalent: 3 strike (all four strikes), 16 throw startup, 5 hold, 0 idle/guard/movement. Constant for the whole move. THIS is the strike gate; MoveType +0x578 and CommandCode cannot tell strikes from throws/holds (a CPU strike, move 8026, had CommandCode 254)",
+  "InStartup": "+0x1A4 is NOT reliable: read 0 on an idle P1 in a later match. Do not gate on it",
+  "P2": "resolved through anchor 'state:P2' (per-side anchors: a field's anchor name plus ':<side>' overrides the shared anchor for that side). The 0x10DFA0 stride seen on 2026-09-14 evening did not survive a character change",
+  "BreakGauge": "+0x584 u16 = Break Gauge, CONFIRMED 2026-09-15: at >= 150 the bot's 4S (back + I) came out as the Break Hold (our ids 8407/8409, caught a low kick and a mid punch). Rises by half the damage taken, also on damage dealt in live matches (seen 0..170 on our side). On-screen bars were FULL at 135 (ours) and 172 (theirs): the field keeps counting past full, 100 = full (--gauge-max 100). S alone = Fatal Rush (8399) - the direction must register a frame before S",
+  "BreakMeter": "+0x5B4 u16 = the Break Gauge shown on screen. 0..200, 200 = full bar, a match starts at 100, carries over between rounds, Break Hold spends ~100. Confirmed live 2026-09-15 (P1 pinned at 200 with a full bar; P2 104->147 while taking hits). +0x584 is only a running total."
+ }
 }

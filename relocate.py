@@ -198,6 +198,59 @@ def walk(proc, start, offsets):
     return addr
 
 
+def repair(proc, raw, mod, want_char=None, names=None, log=print):
+    """Re-find the module offset at the root of each pointer chain.
+
+    Returns {anchor name: new module offset}. This is the whole of what a game
+    patch breaks, so holdbot calls it at startup instead of exiting, and the
+    manual tool is now just a way to run it and look at the answer.
+    """
+    states, raw_n, n_alive = find_state_objects(proc, want_char)
+    if not states:
+        log(f"  no live state blocks ({raw_n} matched the signature, "
+            f"{n_alive} changed at all). Not in a live match?")
+        return {}
+    log(f"  {n_alive} live state block(s) out of {raw_n} matching")
+    for a in states[:4]:
+        log(f"    0x{a:X}  char={proc.u32(a + 0x14):<4} "
+            f"hp={proc.u16(a + 0x580):<4} move={proc.u16(a + 0x68)}")
+    want = set(states)
+    ranges = heap_ranges(proc)
+    slots = module_slots(proc, mod)
+    log(f"  {len(slots)} pointer-shaped slots in the image")
+
+    out = {}
+    names = names or [n for n, a in raw["anchors"].items()
+                      if a.get("kind") == "pointer"]
+    for name in names:
+        a = raw["anchors"].get(name)
+        if not a or a.get("kind") != "pointer":
+            continue
+        offs = [_int(o) for o in a.get("offsets", [])]
+        is_pos = name.split(":")[0] == "pos"
+        for off, _val in slots:
+            addr = walk(proc, mod[1] + off, offs)
+            if addr is None:
+                continue
+            if (looks_like_pos(proc, addr, ranges) if is_pos
+                    else (addr in want)):
+                out[name] = off
+                break
+        if name not in out:
+            log(f"  {name}: NOT FOUND - the tail of this chain moved too, "
+                f"which needs pointerscan.py")
+    return out
+
+
+def write_offsets(raw, found, path=LAYOUT):
+    shutil.copyfile(path, path + ".bak")
+    for name, off in found.items():
+        raw["anchors"][name]["module_offset"] = f"0x{off:X}"
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(raw, fh, indent=1)
+        fh.write("\n")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
