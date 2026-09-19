@@ -55,51 +55,52 @@ SIZES = {"u8": 1, "u16": 2, "u32": 4}
 FMTS = {"u8": "<B", "u16": "<H", "u32": "<I"}
 
 
-def looks_like_state(proc, addr):
-    for _name, off, kind, lo, hi in CHECKS:
-        raw = proc.read(addr + off, SIZES[kind])
-        if not raw:
-            return False
-        v = struct.unpack(FMTS[kind], raw)[0]
-        if not lo <= v <= hi:
-            return False
-    return True
+def find_state_objects(proc, want_char=None, limit=64):
+    """Heap objects matching the player-state signature, confirmed live.
 
-
-def find_state_objects(proc, limit=64):
-    """Heap objects matching the state signature, confirmed by a live frame
-    counter. Scans on the health field first: a u16 in 1..400 at a 16-byte
-    aligned address is common, but the five other fields together are not."""
+    The first version checked each candidate with six reads and stopped at the
+    first 256 matches. Zeroed memory passes a range check - character 0,
+    health 2, move 0 - so it filled up on blank pages in the first region and
+    never reached a real object. Everything is compared in numpy across the
+    whole region instead, and the fields that are never zero in a live match
+    (the character id and the per-move frame counter) have to be non-zero.
+    """
     hits = []
-    seen = set()
     for r in proc.regions(writable_only=True, private_only=True, chunk=1 << 24):
         buf = proc.read(r.base, r.size)
         if not buf or len(buf) < 0x1000:
             continue
-        arr = np.frombuffer(buf, dtype=np.uint16,
-                            count=(len(buf) // 2))
-        # candidate health values, then step back to the object base
-        idx = np.nonzero((arr >= 1) & (arr <= 400))[0]
-        for i in idx:
-            base = r.base + int(i) * 2 - 0x580
-            if base <= 0 or base % 8 or base in seen:
-                continue
-            seen.add(base)
-            if looks_like_state(proc, base):
-                hits.append(base)
-                if len(hits) >= limit * 4:
-                    break
-        if len(hits) >= limit * 4:
+        n = (len(buf) - 0x582) // 8
+        if n <= 0:
+            continue
+
+        def fld(off, dt):
+            step = 8 // np.dtype(dt).itemsize
+            return np.frombuffer(buf, dt, offset=off, count=n * step)[::step]
+
+        char = fld(0x14, np.uint32)
+        move = fld(0x68, np.uint16)
+        kind = fld(0x108, np.uint8)
+        phase = fld(0x128, np.uint16)
+        frame = fld(0x174, np.uint16)
+        hp = fld(0x580, np.uint16)
+
+        ok = ((char >= 1) & (char <= 120)      # a real fighter id, never 0
+              & (hp >= 1) & (hp <= 400)
+              & (frame >= 1) & (frame <= 4000)  # the counter always ticks
+              & (kind <= 40) & (phase <= 16) & (move <= 40000))
+        if want_char is not None:
+            ok &= (char == want_char)
+        for i in np.nonzero(ok)[0]:
+            hits.append(r.base + int(i) * 8)
+        if len(hits) > 4000:
             break
 
     # a real state block ticks: the frame counter advances while the game runs
-    alive = []
     first = {a: proc.u16(a + 0x174) for a in hits}
     time.sleep(0.35)
-    for a in hits:
-        if proc.u16(a + 0x174) != first.get(a):
-            alive.append(a)
-    return (alive or hits)[:limit]
+    alive = [a for a in hits if proc.u16(a + 0x174) != first.get(a)]
+    return alive[:limit], len(hits)
 
 
 def module_slots(proc, mod):
@@ -140,6 +141,10 @@ def main():
                     help="update layout.json (the old one is kept as .bak)")
     ap.add_argument("--anchor", action="append", default=None,
                     help="only this anchor; may be repeated")
+    ap.add_argument("--char", type=int, default=None,
+                    help="only accept state blocks whose character id is this "
+                         "(35 for Minato, 21 Nyotengu, 30 Mai, 31 Kula). Use it "
+                         "when the scan comes back with implausible ids.")
     args = ap.parse_args()
 
     layout = load_layout()
@@ -160,12 +165,15 @@ def main():
     print(f"{layout['process']} base 0x{mod[1]:X} size 0x{mod[2]:X}")
 
     print("scanning the heap for player state blocks...")
-    states = find_state_objects(proc)
+    states, raw_n = find_state_objects(proc, args.char)
     if not states:
-        print("no state blocks found. Is a match actually running? "
-              "In a menu or character select they do not exist yet.")
+        print(f"no live state blocks found ({raw_n} matched the signature but "
+              f"none had a frame counter that advanced).")
+        print("Is a match actually running, and not paused? In a menu or "
+              "character select these objects do not exist yet.")
         return 1
-    print(f"  {len(states)} candidate(s):")
+    print(f"  {len(states)} live candidate(s) out of {raw_n} matching "
+          f"the signature:")
     for a in states[:8]:
         print(f"    0x{a:X}  char={proc.u32(a + 0x14):<4} "
               f"hp={proc.u16(a + 0x580):<4} move={proc.u16(a + 0x68)}")
